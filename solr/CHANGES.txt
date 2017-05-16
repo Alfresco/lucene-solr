@@ -66,6 +66,14 @@ Bug Fixes
 * SOLR-11228: Exclude static html files in the partials directory from authentication and authorization checks. The UI
   will open correctly with kerberos enabled (Ishan Chattopadhyaya, Varun Thacker)
 
+New Features
+----------------------
+
+* SOLR-10307: Allow Passing SSL passwords through environment variables. (Mano Kovacs via Mark Miller)
+
+Other Changes
+----------------------
+
 * SOLR-10983: Fix DOWNNODE -> queue-work explosion (Scott Blum, Joshua Humphries)
 
 * SOLR-8689: Fix bin/solr.cmd so it can run properly on Java 9 (Uwe Schindler, hossman)
