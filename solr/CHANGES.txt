@@ -16,6 +16,176 @@ In this release, there is an example Solr server including a bundled
 servlet container in the directory named "example".
 See the Quick Start guide at http://lucene.apache.org/solr/quickstart.html
 
+==================  7.0.0 ==================
+
+Upgrading from Solr 6.x
+----------------------
+
+* HttpClientInterceptorPlugin is now HttpClientBuilderPlugin and must work with a 
+  SolrHttpClientBuilder rather than an HttpClientConfigurer.
+  
+* HttpClientUtil now allows configuring HttpClient instances via SolrHttpClientBuilder
+  rather than an HttpClientConfigurer. Use of env variable SOLR_AUTHENTICATION_CLIENT_CONFIGURER
+  no longer works, please use SOLR_AUTHENTICATION_CLIENT_BUILDER 
+
+* SolrClient implementations now use their own internal configuration for socket timeouts,
+  connect timeouts, and allowing redirects rather than what is set as the default when
+  building the HttpClient instance. Use the appropriate setters on the SolrClient instance.
+  
+* HttpSolrClient#setAllowCompression has been removed and compression must be enabled as
+  a constructor param. 
+  
+* HttpSolrClient#setDefaultMaxConnectionsPerHost and
+  HttpSolrClient#setMaxTotalConnections have been removed. These now default very
+  high and can only be changed via param when creating an HttpClient instance.
+
+* Query time join with scoring {!join score=none} (even none) doesn't handle single value numeric fields.
+  Users are advised to convert these fields into string and reindex.
+
+* Deprecated collection and configset methods on MiniSolrCloudCluster have been
+  removed
+
+* Index-time boosts are not supported anymore. If any boosts are provided, they
+  will be ignored by the indexing chain. As a replacement, index-time scoring
+  factors should be indexed in a separate field and combined with the query
+  score using a function query.
+
+* Deprecated method getNumericType() has been removed from FieldType. Use getNumberType() instead
+
+* MBean names and attributes now follow hierarchical names used in metrics. This is reflected also in
+  /admin/mbeans and /admin/plugins output, and can be observed in the UI Plugins tab, because now all these
+  APIs get their data from the metrics API. The old (mostly flat) JMX view has been removed.
+
+* <jmx> element in solrconfig.xml is no longer supported. Equivalent functionality can be configured in
+  solr.xml using <metrics><reporter ...> element and SolrJmxReporter implementation. Limited back-compatibility
+  is offered by automatically adding a default instance of SolrJmxReporter if it's missing, AND when a local
+  MBean server is found (which can be activated either via ENABLE_REMOTE_JMX_OPTS in solr.in.sh or via system
+  properties, eg. -Dcom.sun.management.jmxremote). This default instance exports all Solr metrics from all
+  registries as hierarchical MBeans. This behavior can be also disabled by specifying a SolrJmxReporter
+  configuration with a boolean init arg "enabled" set to "false". For a more fine-grained control users
+  should explicitly specify at least one SolrJmxReporter configuration.
+  
+* The sow (split-on-whitespace) request param now defaults to false (true in previous versions).
+  This affects the edismax and standard/"lucene" query parsers: if the sow param is not specified,
+  query text will not be split on whitespace before analysis. See
+  https://lucidworks.com/2017/04/18/multi-word-synonyms-solr-adds-query-time-support/ .
+
+* Setting <solrQueryParser defaultOperator="..."/> in schema is no longer allowed and will cause an exception.
+  Please use "q.op" parameter on the request instead. For more details, see SOLR-10584.
+
+New Features
+----------------------
+* SOLR-9857, SOLR-9858: Collect aggregated metrics from nodes and shard leaders in overseer. (ab)
+
+* SOLR-9835: Create another replication mode for SolrCloud
+
+* SOLR-10292: Adds CartesianProductStream which turns a single tuple with a multi-valued field into N 
+  tuples, one for each value in the multi-valued field. (Dennis Gove)
+
+* SOLR-10356: Adds basic math Streaming Evaluators (Dennis Gove)
+
+* SOLR-10393: Adds UUID Streaming Evaluator (Dennis Gove)
+
+* SOLR-10046: Add UninvertDocValuesMergePolicyFactory class. (Keith Laban, Christine Poerschke)
+
+* SOLR-10547: JSON Facet API: Implement support for single-valued string fields for min/max aggregations.
+  (yonik)
+
+* SOLR-10262: Add support for configurable metrics implementations. (ab)
+
+* SOLR-10431: Make it possible to invoke v2 api calls using SolrJ (Cao Manh Dat, Noble Paul, shalin)
+
+Bug Fixes
+----------------------
+* SOLR-9262: Connection and read timeouts are being ignored by UpdateShardHandler after SOLR-4509.
+  (Mark Miller, shalin)
+
+* SOLR-9837: Fix 55% performance regression of FieldCache uninvert time of
+  numeric fields.  (yonik)
+
+* SOLR-10408: v2 API introspect should return useful message for non-existent command (Cao Manh Dat)
+
+* SOLR-10411: v2 Collection API "modify" command specification's replicationFactor property is incorrectly typed as string,
+  should be integer (Cao Manh Dat)
+
+* SOLR-10405: v2 API introspect response contains multiple copies of the experimental format WARNING (Cao Manh Dat)
+
+* SOLR-10412: v2 API: many API command specification properties are typed "number" but should instead be typed "integer"
+  (Steve Rowe, Cao Manh Dat)
+
+Optimizations
+----------------------
+
+* SOLR-4509: Move to non deprecated HttpClient impl classes to remove stale connection 
+  check on every request and move connection lifecycle management towards the client.
+  (Ryan Zezeski, Mark Miller, Shawn Heisey, Steve Davids)
+
+* SOLR-9255: Rename SOLR_AUTHENTICATION_CLIENT_CONFIGURER -> SOLR_AUTHENTICATION_CLIENT_BUILDER (janhoy) 
+
+* SOLR-9579: Make Solr's SchemaField implement Lucene's IndexableFieldType, removing the 
+  creation of a Lucene FieldType every time a field is indexed. (John Call, yonik) 
+
+* SOLR-9822: JSON Facet API: Recover performance lost due to the DocValues transition to
+  an iterator API (LUCENE-7407).  This only fixes calculating counts for single-valued
+  string fields from the FieldCache, resulting in up to 56% better throughput for those cases.
+  (yonik)
+
+Other Changes
+----------------------
+* SOLR-10236: Removed FieldType.getNumericType(). Use getNumberType() instead. (Tomás Fernández Löbbe)
+
+* SOLR-10347: Removed index level boost support from "documents" section of the admin UI (Amrit Sarkar via
+  Tomás Fernández Löbbe)
+
+* SOLR-9959: SolrInfoMBean category and hierarchy cleanup. Per-component statistics are now obtained from
+  the metrics API, legacy JMX support has been replaced with SolrJmxReporter functionality. Several reporter
+  improvements (support for multiple prefix filters, "enabled" flag, reuse of service clients). (ab)
+
+* SOLR-10418: Expose safe system properties via metrics API as 'system.properties' in 'solr.jvm' group.
+  Add support for selecting specific properties from any compound metric using 'property' parameter to
+  /admin/metrics handler. (ab)
+
+* SOLR-10557: Make "compact" format default for /admin/metrics. (ab)
+
+* SOLR-10310: By default, stop splitting on whitespace prior to analysis
+  in edismax and standard/"lucene" query parsers. (Steve Rowe)
+
+* SOLR-10647: Move the V1 <-> V2 API mapping to SolrJ (noble)
+
+* SOLR-10584: We'll now always throw an exception if defaultOperator is found in schema. This config has
+  been deprecated since 3.6, and enforced for new configs since 6.6 (janhoy)
+
+==================  6.7.0 ==================
+
+Consult the LUCENE_CHANGES.txt file for additional, low level, changes in this release.
+
+Versions of Major Components
+---------------------
+Apache Tika 1.13
+Carrot2 3.15.0
+Velocity 1.7 and Velocity Tools 2.0
+Apache UIMA 2.3.1
+Apache ZooKeeper 3.4.10
+Jetty 9.3.14.v20161028
+
+Detailed Change List
+----------------------
+
+New Features
+----------------------
+
+* SOLR-10307: Allow Passing SSL passwords through environment variables. (Mano Kovacs via Mark Miller)
+
+Other Changes
+----------------------
+
+* SOLR-10617: JDBCStream accepts columns of type TIME, DATE & TIMESTAMP as well as CLOBs and decimal
+  numeric types (James Dyer)
+
+* SOLR-10400: Replace (instanceof TrieFooField || instanceof FooPointField) constructs with
+  FieldType.getNumberType() or SchemaField.getSortField() where appropriate. (hossman, Steve Rowe)
+
+>>>>>>> 0fb89f1... SOLR-10307: Allow Passing SSL passwords through environment variables.
 ==================  6.6.0 ==================
 
 Consult the LUCENE_CHANGES.txt file for additional, low level, changes in this release.
