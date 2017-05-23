@@ -66,6 +66,13 @@ Bug Fixes
 * SOLR-11228: Exclude static html files in the partials directory from authentication and authorization checks. The UI
   will open correctly with kerberos enabled (Ishan Chattopadhyaya, Varun Thacker)
 
+Upgrade Notes
+----------------------
+
+* SOLR-10307: If starting Jetty without the Solr start script, you must now pass keystore and truststore
+  passwords via the env variables SOLR_SSL_KEY_STORE_PASSWORD and SOLR_SSL_TRUST_STORE_PASSWORD rather
+  than system properties.
+
 New Features
 ----------------------
 
