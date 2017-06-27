@@ -183,6 +183,11 @@ New Features
 
 * SOLR-10307: Allow Passing SSL passwords through environment variables. (Mano Kovacs via Mark Miller)
 
+* SOLR-10849: MoreLikeThisComponent should expose setMaxDocFreqPct (maxDoc 
+  frequency percentage). (Dawid Weiss)
+
+* SOLR-10307: Allow Passing SSL passwords through environment variables. (Mano Kovacs, Michael Suzuki via Mark Miller)
+
 Other Changes
 ----------------------
 
@@ -192,7 +197,6 @@ Other Changes
 * SOLR-10400: Replace (instanceof TrieFooField || instanceof FooPointField) constructs with
   FieldType.getNumberType() or SchemaField.getSortField() where appropriate. (hossman, Steve Rowe)
 
->>>>>>> 0fb89f1... SOLR-10307: Allow Passing SSL passwords through environment variables.
 ==================  6.6.0 ==================
 
 Consult the LUCENE_CHANGES.txt file for additional, low level, changes in this release.
