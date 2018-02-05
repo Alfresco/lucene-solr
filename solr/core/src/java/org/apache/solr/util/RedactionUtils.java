@@ -24,7 +24,7 @@ public class RedactionUtils {
   private static Pattern pattern = Pattern.compile(System.getProperty(SOLR_REDACTION_SYSTEM_PATTERN_PROP, ".*password.*"), Pattern.CASE_INSENSITIVE);
   private static final String REDACT_STRING = "--REDACTED--";
 
-  private static boolean redactSystemProperty = Boolean.parseBoolean(System.getProperty("solr.redaction.system.enabled", "false"));
+  private static boolean redactSystemProperty = Boolean.parseBoolean(System.getProperty("solr.redaction.system.enabled", "true"));
 
   /**
    * Returns if the given system property should be redacted.
