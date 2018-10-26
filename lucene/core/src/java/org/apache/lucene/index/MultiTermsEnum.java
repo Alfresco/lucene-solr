@@ -367,6 +367,12 @@ public final class MultiTermsEnum extends TermsEnum {
     return docsEnum.reset(subDocs, upto);
   }
 
+  @Override
+  public ImpactsEnum impacts(int flags) throws IOException {
+    // implemented to not fail CheckIndex, but you shouldn't be using impacts on a slow reader
+    return new SlowImpactsEnum(postings(null, flags));
+  }
+
   final static class TermsEnumWithSlice {
     private final ReaderSlice subSlice;
     TermsEnum terms;

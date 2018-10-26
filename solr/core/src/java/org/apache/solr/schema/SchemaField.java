@@ -161,10 +161,14 @@ public final class SchemaField extends FieldProperties implements IndexableField
    * @see FieldType#getSortField
    */
   public void checkSortability() throws SolrException {
-    if ( multiValued() ) {
+    if ( multiValued()
+         // if either of these are non-null, then we should not error
+         && null == this.type.getDefaultMultiValueSelectorForSort(this,true)
+         && null == this.type.getDefaultMultiValueSelectorForSort(this,false) ) {
+      
       throw new SolrException(SolrException.ErrorCode.BAD_REQUEST, 
                               "can not sort on multivalued field: " 
-                              + getName());
+                              + getName() + " of type: " + this.type.getTypeName());
     }
     if (! hasDocValues() ) {
       if ( ! ( indexed() && null != this.type.getUninversionType(this) ) ) {
@@ -411,7 +415,12 @@ public final class SchemaField extends FieldProperties implements IndexableField
   }
 
   @Override
-  public int pointDimensionCount() {
+  public int pointDataDimensionCount() {
+    return 0;
+  }
+
+  @Override
+  public int pointIndexDimensionCount() {
     return 0;
   }
 

@@ -38,6 +38,7 @@ import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.util.SolrPluginUtils;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.noggit.ObjectBuilder;
@@ -96,6 +97,7 @@ public class TestExtendedDismaxParser extends SolrTestCaseJ4 {
     assertU(adoc("id", "71", "text_sw", "ties"));
     assertU(adoc("id", "72", "text_sw", "wifi ATM"));
     assertU(adoc("id", "73", "shingle23", "A B X D E"));
+    assertU(adoc("id", "74", "isocharfilter", "niño"));
 //    assertU(adoc("id", "74", "text_pick_best", "tabby"));
 //    assertU(adoc("id", "74", "text_as_distinct", "persian"));
 
@@ -210,7 +212,23 @@ public class TestExtendedDismaxParser extends SolrTestCaseJ4 {
           , "*[count(//doc)=1]");
     }
   }
-    
+
+  public void testCharFilter() throws Exception {
+    // test that charfilter was applied by the indexer
+    assertQ(req("defType", "edismax",
+        "stopwords","false",
+        "qf", "isocharfilter",
+        "q","nino"), "*[count(//doc)=1]"
+    );
+
+    // test that charfilter was applied to the query
+    assertQ(req("defType", "edismax",
+        "stopwords","false",
+        "qf", "isocharfilter",
+        "q","niño"), "*[count(//doc)=1]"
+    );
+  }
+
   // test the edismax query parser based on the dismax parser
   public void testFocusQueryParser() {
     String allq = "id:[42 TO 51]";
@@ -655,7 +673,8 @@ public class TestExtendedDismaxParser extends SolrTestCaseJ4 {
       try {
         h.query(req("defType","edismax", "q","blarg", "qf","field1", "f.field1.qf","field2 field3","f.field2.qf","field4 field5", "f.field4.qf","field5", "f.field5.qf","field6", "f.field3.qf","field6"));
       } catch (SolrException e) {
-        fail("This is not cyclic alising");
+        assertFalse("This is not cyclic alising", e.getCause().getMessage().contains("Field aliases lead to a cycle"));
+        assertTrue(e.getCause().getMessage().contains("not a valid field name"));
       }
       
       try {
@@ -666,7 +685,7 @@ public class TestExtendedDismaxParser extends SolrTestCaseJ4 {
       }
       
       try {
-        h.query(req("defType","edismax", "q","who:(Zapp Pig)", "qf","field1", "f.who.qf","name","f.name.qf","myalias", "f.myalias.qf","who"));
+        h.query(req("defType","edismax", "q","who:(Zapp Pig)", "qf","text", "f.who.qf","name","f.name.qf","myalias", "f.myalias.qf","who"));
         fail("Cyclic alising not detected");
       } catch (SolrException e) {
         assertTrue(e.getCause().getMessage().contains("Field aliases lead to a cycle"));
@@ -2072,6 +2091,33 @@ public class TestExtendedDismaxParser extends SolrTestCaseJ4 {
   @Test(expected=SolrException.class)
   public void killInfiniteRecursionParse() throws Exception {
     assertJQ(req("defType", "edismax", "q", "*", "qq", "{!edismax v=something}", "bq", "{!edismax v=$qq}"));
+  }
+  
+  /** SOLR-5163 */ 
+  @Test
+  public void testValidateQueryFields() throws Exception {
+    // field aliasing covered by test - testAliasing
+    ModifiableSolrParams params = new ModifiableSolrParams();
+    params.add("defType", "edismax");
+    params.add("df", "text");
+    params.add("q", "olive AND other");
+    params.add("qf", "subject^3 title");
+    params.add("debugQuery", "true");
+    
+    // test valid field names
+    try (SolrQueryRequest req = req(params)) {
+      String response = h.query(req);
+      response.contains("+DisjunctionMaxQuery((title:olive | (subject:oliv)^3.0)) +DisjunctionMaxQuery((title:other | (subject:other)^3.0))");
+    }
+    
+    // test invalid field name
+    params.set("qf", "subject^3 nosuchfield");
+    try (SolrQueryRequest req = req(params)) {
+      h.query(req);
+    } catch (Exception e) {
+      Assert.assertEquals("org.apache.solr.search.SyntaxError: Query Field 'nosuchfield' is not a valid field name", e.getMessage());
+    }
+    
   }
 
 }

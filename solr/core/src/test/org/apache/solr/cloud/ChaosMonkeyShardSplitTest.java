@@ -20,10 +20,17 @@ import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.lucene.util.LuceneTestCase.Slow;
 import org.apache.solr.client.solrj.SolrClient;
+import org.apache.solr.cloud.AbstractDistribZkTestBase;
+import org.apache.solr.cloud.ElectionContext;
+import org.apache.solr.cloud.LeaderElector;
+import org.apache.solr.cloud.Overseer;
+import org.apache.solr.cloud.api.collections.ShardSplitTest;
 import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.common.cloud.ClusterState;
 import org.apache.solr.common.cloud.DocCollection;
@@ -65,6 +72,7 @@ public class ChaosMonkeyShardSplitTest extends ShardSplitTest {
     final List<DocRouter.Range> ranges = router.partitionRange(2, shard1Range);
     final int[] docCounts = new int[ranges.size()];
     int numReplicas = shard1.getReplicas().size();
+    final Set<String> documentIds = ConcurrentHashMap.newKeySet(1024);
 
     Thread indexThread = null;
     OverseerRestarter killer = null;
@@ -74,7 +82,7 @@ public class ChaosMonkeyShardSplitTest extends ShardSplitTest {
     try {
       del("*:*");
       for (int id = 0; id < 100; id++) {
-        indexAndUpdateCount(router, ranges, docCounts, String.valueOf(id), id);
+        indexAndUpdateCount(router, ranges, docCounts, String.valueOf(id), id, documentIds);
       }
       commit();
 
@@ -84,7 +92,7 @@ public class ChaosMonkeyShardSplitTest extends ShardSplitTest {
           int max = atLeast(401);
           for (int id = 101; id < max; id++) {
             try {
-              indexAndUpdateCount(router, ranges, docCounts, String.valueOf(id), id);
+              indexAndUpdateCount(router, ranges, docCounts, String.valueOf(id), id, documentIds);
               Thread.sleep(atLeast(25));
             } catch (Exception e) {
               log.error("Exception while adding doc", e);
@@ -129,7 +137,7 @@ public class ChaosMonkeyShardSplitTest extends ShardSplitTest {
       killerThread.start();
       killCounter.incrementAndGet();
 
-      splitShard(AbstractDistribZkTestBase.DEFAULT_COLLECTION, SHARD1, null, null);
+      splitShard(AbstractDistribZkTestBase.DEFAULT_COLLECTION, SHARD1, null, null, false);
 
       log.info("Layout after split: \n");
       printLayout();
@@ -148,7 +156,7 @@ public class ChaosMonkeyShardSplitTest extends ShardSplitTest {
       }
     }
 
-    checkDocCountsAndShardStates(docCounts, numReplicas);
+    checkDocCountsAndShardStates(docCounts, numReplicas, documentIds);
 
     // todo - can't call waitForThingsToLevelOut because it looks for
     // jettys of all shards

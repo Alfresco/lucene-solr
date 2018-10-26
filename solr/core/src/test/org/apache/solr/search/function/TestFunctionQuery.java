@@ -800,7 +800,7 @@ public class TestFunctionQuery extends SolrTestCaseJ4 {
   public void testBooleanFunctions() throws Exception {
     clearIndex();
 
-    assertU(adoc("id", "1", "text", "hello", "foo_s","A", "foo_ti", "0", "foo_tl","0"));
+    assertU(adoc("id", "1", "text", "hello", "foo_s","A", "foo_ti", "0", "foo_tl","0", "foo_tf", "0.00001"));
     assertU(adoc("id", "2"                              , "foo_ti","10", "foo_tl","11"));
     assertU(commit());
 
@@ -819,6 +819,10 @@ public class TestFunctionQuery extends SolrTestCaseJ4 {
     // test if()
     assertJQ(req("q", "id:1", "fl", "a1:if(true,'A','B')", "fl","b1:if(false,'A',testfunc('B'))")
         , "/response/docs/[0]=={'a1':'A', 'b1':'B'}");
+    // queries with positive scores < 1 should still evaluate to 'true' in boolean context
+    assertJQ(req("q", "id:1", "nested", "*:*^=0.00001",
+                 "fl", "a1:if(query($nested),'A','B')", "fl","b1:if(not(query($nested)),'A','B')")
+        , "/response/docs/[0]=={'a1':'A', 'b1':'B'}");
 
     // test boolean operators
     assertJQ(req("q", "id:1", "fl", "t1:and(testfunc(true),true)", "fl","f1:and(true,false)", "fl","f2:and(false,true)", "fl","f3:and(false,false)")
@@ -830,6 +834,12 @@ public class TestFunctionQuery extends SolrTestCaseJ4 {
     assertJQ(req("q", "id:1", "fl", "t:not(testfunc(false)),f:not(true)")
         , "/response/docs/[0]=={'t':true, 'f':false}");
 
+    // test fields evaluated as booleans in wrapping functions
+    assertJQ(req("q", "id:1", "fl", "a:not(foo_ti), b:if(foo_tf,'TT','FF'), c:and(true,foo_tf)")
+        , "/response/docs/[0]=={'a':true, 'b':'TT', 'c':true}");
+    assertJQ(req("q", "id:2", "fl", "a:not(foo_ti), b:if(foo_tf,'TT','FF'), c:and(true,foo_tf)")
+        , "/response/docs/[0]=={'a':false, 'b':'FF', 'c':false}");
+    
 
     // def(), the default function that returns the first value that exists
     assertJQ(req("q", "id:1", "fl", "x:def(id,testfunc(123)), y:def(foo_f,234.0)")
@@ -838,8 +848,8 @@ public class TestFunctionQuery extends SolrTestCaseJ4 {
         , "/response/docs/[0]=={'x':'A', 'y':'W'}");
 
     // test constant conversion to boolean
-    assertJQ(req("q", "id:1", "fl", "a:not(0), b:not(1), c:not(0.0), d:not(1.1), e:not('A')")
-        , "/response/docs/[0]=={'a':true, 'b':false, 'c':true, 'd':false, 'e':false}");
+    assertJQ(req("q", "id:1", "fl", "a:not(0), b:not(1), c:not(0.0), d:not(1.1), e:not('A'), f:not(0.001)")
+        , "/response/docs/[0]=={'a':true, 'b':false, 'c':true, 'd':false, 'e':false, 'f':false}");
 
   }
 
@@ -977,5 +987,83 @@ public class TestFunctionQuery extends SolrTestCaseJ4 {
     singleTest("number_of_atoms_in_universe_l", "if(lt(number_of_atoms_in_universe_l," + Long.toString(Long.MAX_VALUE) + "),5,2)",
                /*id*/2, /*score*/5,
                /*id*/1, /*score*/2);
+  }
+
+  @Test
+  public void testEqualFunction() {
+    clearIndex();
+    assertU(adoc("id", "1", "field1_s", "value1", "field2_s", "value1",
+        "field1_s_dv", "value1", "field2_s_dv", "value2", "field_b", "true"));
+    assertU(adoc("id", "2", "field1_s", "value1", "field2_s", "value2",
+        "field1_s_dv", "value1", "field2_s_dv", "value1", "field_b", "false"));
+    assertU(commit());
+
+    singleTest("field1_s", "if(eq(field1_s,field2_s),5,2)",
+        /*id*/1, /*score*/5,
+        /*id*/2, /*score*/2);
+    singleTest("field1_s_dv", "if(eq(field1_s_dv,field2_s_dv),5,2)",
+        /*id*/2, /*score*/5,
+        /*id*/1, /*score*/2);
+    singleTest("field1_s", "if(eq(field1_s,field1_s_dv),5,2)",
+        /*id*/1, /*score*/5,
+        /*id*/2, /*score*/5);
+    singleTest("field2_s", "if(eq(field2_s,field2_s_dv),5,2)",
+        /*id*/1, /*score*/2,
+        /*id*/2, /*score*/2);
+    singleTest("field2_s", "if(eq(field2_s,'value1'),5,2)",
+        /*id*/1, /*score*/5,
+        /*id*/2, /*score*/2);
+    singleTest("field1_s", "if(eq('value1','value1'),5,2)",
+        /*id*/1, /*score*/5,
+        /*id*/2, /*score*/5);
+    singleTest("field_b", "if(eq(if(field_b,'value1','value2'),'value1'),5,2)",
+        /*id*/1, /*score*/5,
+        /*id*/2, /*score*/2);
+  }
+
+  @Test
+  public void testEqualNumericComparisons() {
+    clearIndex();
+    assertU(adoc("id", "1", "field_d", "5.0", "field_i", "5"));
+    assertU(adoc("id", "2",  "field_d", "3.0", "field_i", "3"));
+    assertU(commit());
+    singleTest("field_d", "if(eq(field_d,5),5,2)",
+        /*id*/1, /*score*/5,
+        /*id*/2, /*score*/2);
+    singleTest("field_d", "if(eq(field_d,5.0),5,2)",
+        /*id*/1, /*score*/5,
+        /*id*/2, /*score*/2);
+    singleTest("field_d", "if(eq(5,def(field_d,5)),5,2)",
+        /*id*/1, /*score*/5,
+        /*id*/2, /*score*/2);
+    singleTest("field_i", "if(eq(5.0,def(field_i,5)),5,2)",
+        /*id*/1, /*score*/5,
+        /*id*/2, /*score*/2);
+    singleTest("field_not_existed_i", "if(def(field_not_existed_i,5.0),5,2)",
+        /*id*/1, /*score*/5,
+        /*id*/2, /*score*/5);
+    singleTest("field_not_existed_i", "if(def(field_not_existed_i,5),5,2)",
+        /*id*/1, /*score*/5,
+        /*id*/2, /*score*/5);
+  }
+
+  @Test
+  public void testDifferentTypesComparisons() {
+    clearIndex();
+    assertU(adoc("id", "1", "field_s", "value"));
+    assertU(adoc("id", "2"));
+    assertU(commit());
+    singleTest("field_s", "if(eq(field_s,'value'),5,2)",
+        /*id*/1, /*score*/5,
+        /*id*/2, /*score*/2);
+    singleTest("field_s", "if(eq(def(field_s,5),5),5,2)",
+        /*id*/2, /*score*/5,
+        /*id*/1, /*score*/2);
+    singleTest("field_s", "if(eq(def(field_s,5),5.0),5,2)",
+        /*id*/2, /*score*/5,
+        /*id*/1, /*score*/2);
+    singleTest("field_s", "if(eq(def(field_s,'5'),5),5,2)",
+        /*id*/1, /*score*/2,
+        /*id*/2, /*score*/2);
   }
 }

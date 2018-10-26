@@ -16,8 +16,6 @@
  */
 package org.apache.lucene.search.similarities;
 
-import java.io.IOException;
-
 import org.apache.lucene.index.FieldInvertState;
 import org.apache.lucene.search.CollectionStatistics;
 import org.apache.lucene.search.Explanation;
@@ -43,7 +41,9 @@ public class AssertingSimilarity extends Similarity {
     assert state.getNumOverlap() < state.getLength();
     assert state.getUniqueTermCount() > 0;
     assert state.getUniqueTermCount() <= state.getLength();
-    return delegate.computeNorm(state);
+    long norm = delegate.computeNorm(state);
+    assert norm != 0;
+    return norm;
   }
 
   @Override
@@ -65,33 +65,26 @@ public class AssertingSimilarity extends Similarity {
     final float boost;
     
     AssertingSimScorer(SimScorer delegate, float boost) {
-      super(delegate.getField());
+      super();
       this.delegate = delegate;
       this.boost = boost;
     }
 
     @Override
-    public float score(float freq, long norm) throws IOException {
+    public float score(float freq, long norm) {
       // freq in bounds
       assert Float.isFinite(freq);
       assert freq > 0;
       // result in bounds
       float score = delegate.score(freq, norm);
       assert Float.isFinite(score);
-      assert score <= maxScore(freq);
+      assert score <= delegate.score(freq, 1);
       assert score >= 0;
       return score;
     }
 
     @Override
-    public float maxScore(float maxFreq) {
-      float maxScore = delegate.maxScore(maxFreq);
-      assert Float.isNaN(maxScore) == false;
-      return maxScore;
-    }
-
-    @Override
-    public Explanation explain(Explanation freq, long norm) throws IOException {
+    public Explanation explain(Explanation freq, long norm) {
       // freq in bounds 
       assert freq != null;
       assert Float.isFinite(freq.getValue().floatValue());

@@ -17,11 +17,11 @@
 package org.apache.lucene.search.similarities;
 
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.lucene.index.FieldInvertState;
+import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.search.CollectionStatistics;
 import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.TermStatistics;
@@ -114,7 +114,14 @@ public class BM25Similarity extends Similarity {
 
   @Override
   public final long computeNorm(FieldInvertState state) {
-    final int numTerms = discountOverlaps ? state.getLength() - state.getNumOverlap() : state.getLength();
+    final int numTerms;
+    if (state.getIndexOptions() == IndexOptions.DOCS && state.getIndexCreatedVersionMajor() >= 8) {
+      numTerms = state.getUniqueTermCount();
+    } else if (discountOverlaps) {
+      numTerms = state.getLength() - state.getNumOverlap();
+    } else {
+      numTerms = state.getLength();
+    }
     return SmallFloat.intToByte4(numTerms);
   }
 
@@ -182,7 +189,7 @@ public class BM25Similarity extends Similarity {
     for (int i = 0; i < cache.length; i++) {
       cache[i] = k1 * ((1 - b) + b * LENGTH_TABLE[i] / avgdl);
     }
-    return new BM25Scorer(collectionStats.field(), boost, k1, b, idf, avgdl, cache);
+    return new BM25Scorer(boost, k1, b, idf, avgdl, cache);
   }
   
   /** Collection statistics for the BM25 model. */
@@ -202,8 +209,7 @@ public class BM25Similarity extends Similarity {
     /** weight (idf * boost) */
     private final float weight;
 
-    BM25Scorer(String field, float boost, float k1, float b, Explanation idf, float avgdl, float[] cache) {
-      super(field);
+    BM25Scorer(float boost, float k1, float b, Explanation idf, float avgdl, float[] cache) {
       this.boost = boost;
       this.idf = idf;
       this.avgdl = avgdl;
@@ -214,19 +220,13 @@ public class BM25Similarity extends Similarity {
     }
 
     @Override
-    public float score(float freq, long encodedNorm) throws IOException {
+    public float score(float freq, long encodedNorm) {
       double norm = cache[((byte) encodedNorm) & 0xFF];
       return weight * (float) (freq / (freq + norm));
     }
 
     @Override
-    public float maxScore(float maxFreq) {
-      // TODO: leverage maxFreq and the min norm from the cache
-      return weight;
-    }
-
-    @Override
-    public Explanation explain(Explanation freq, long encodedNorm) throws IOException {
+    public Explanation explain(Explanation freq, long encodedNorm) {
       List<Explanation> subs = new ArrayList<>(explainConstantFactors());
       Explanation tfExpl = explainTF(freq, encodedNorm);
       subs.add(tfExpl);
@@ -234,7 +234,7 @@ public class BM25Similarity extends Similarity {
           "score(freq="+freq.getValue()+"), product of:", subs);
     }
     
-    private Explanation explainTF(Explanation freq, long norm) throws IOException {
+    private Explanation explainTF(Explanation freq, long norm) {
       List<Explanation> subs = new ArrayList<>();
       subs.add(freq);
       subs.add(Explanation.match(k1, "k1, term saturation parameter"));

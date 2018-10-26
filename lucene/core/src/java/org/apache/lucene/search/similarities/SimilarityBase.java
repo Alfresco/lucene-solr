@@ -17,11 +17,11 @@
 package org.apache.lucene.search.similarities;
 
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.lucene.index.FieldInvertState;
+import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.search.CollectionStatistics;
 import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.TermStatistics;
@@ -90,7 +90,7 @@ public abstract class SimilarityBase extends Similarity {
     if (weights.length == 1) {
       return weights[0];
     } else {
-      return new MultiSimilarity.MultiSimScorer(collectionStats.field(), weights);
+      return new MultiSimilarity.MultiSimScorer(weights);
     }
   }
   
@@ -123,13 +123,6 @@ public abstract class SimilarityBase extends Similarity {
    * @return the score.
    */
   protected abstract double score(BasicStats stats, double freq, double docLen);
-
-  /**
-   * Return the maximum value that may be returned by {@link #score(BasicStats, double, double)}
-   * for the given stats.
-   * @see org.apache.lucene.search.similarities.Similarity.SimScorer#maxScore(float)
-   */
-  protected abstract double maxScore(BasicStats stats, double maxFreq);
 
   /**
    * Subclasses should implement this method to explain the score. {@code expl}
@@ -193,10 +186,13 @@ public abstract class SimilarityBase extends Similarity {
   @Override
   public final long computeNorm(FieldInvertState state) {
     final int numTerms;
-    if (discountOverlaps)
+    if (state.getIndexOptions() == IndexOptions.DOCS && state.getIndexCreatedVersionMajor() >= 8) {
+      numTerms = state.getUniqueTermCount();
+    } else if (discountOverlaps) {
       numTerms = state.getLength() - state.getNumOverlap();
-    else
+    } else {
       numTerms = state.getLength();
+    }
     return SmallFloat.intToByte4(numTerms);
   }
 
@@ -220,26 +216,20 @@ public abstract class SimilarityBase extends Similarity {
     final BasicStats stats;
     
     BasicSimScorer(BasicStats stats) {
-      super(stats.field);
       this.stats = stats;
     }
 
-    double getLengthValue(long norm) throws IOException {
+    double getLengthValue(long norm) {
       return LENGTH_TABLE[Byte.toUnsignedInt((byte) norm)];
     }
     
     @Override
-    public float score(float freq, long norm) throws IOException {
+    public float score(float freq, long norm) {
       return (float) SimilarityBase.this.score(stats, freq, getLengthValue(norm));
     }
 
     @Override
-    public float maxScore(float maxFreq) {
-      return (float) SimilarityBase.this.maxScore(stats, maxFreq);
-    }
-
-    @Override
-    public Explanation explain(Explanation freq, long norm) throws IOException {
+    public Explanation explain(Explanation freq, long norm) {
       return SimilarityBase.this.explain(stats, freq, getLengthValue(norm));
     }
 

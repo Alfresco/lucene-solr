@@ -20,11 +20,12 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.lucene.index.ImpactsEnum;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.PostingsEnum;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.index.TermContext;
+import org.apache.lucene.index.TermStates;
 import org.apache.lucene.index.TermState;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
@@ -156,7 +157,7 @@ public final class SolrRangeQuery extends ExtendedQueryBase implements DocSetPro
 
   private DocSet createDocSet(SolrIndexSearcher searcher, long cost) throws IOException {
     int maxDoc = searcher.maxDoc();
-    BitDocSet liveDocs = searcher.getLiveDocs();
+    BitDocSet liveDocs = searcher.getLiveDocSet();
     FixedBitSet liveBits = liveDocs.size() == maxDoc ? null : liveDocs.getBits();
 
     DocSetBuilder builder = new DocSetBuilder(maxDoc, cost);
@@ -236,6 +237,11 @@ public final class SolrRangeQuery extends ExtendedQueryBase implements DocSetPro
     @Override
     public PostingsEnum postings(PostingsEnum reuse, int flags) throws IOException {
       return te.postings(reuse, flags);
+    }
+
+    @Override
+    public ImpactsEnum impacts(int flags) throws IOException {
+      return te.impacts(flags);
     }
 
     @Override
@@ -396,9 +402,9 @@ public final class SolrRangeQuery extends ExtendedQueryBase implements DocSetPro
       if (count < 0) {
         BooleanQuery.Builder bq = new BooleanQuery.Builder();
         for (TermAndState t : collectedTerms) {
-          final TermContext termContext = new TermContext(searcher.getTopReaderContext());
-          termContext.register(t.state, context.ord, t.docFreq, t.totalTermFreq);
-          bq.add(new TermQuery(new Term( SolrRangeQuery.this.getField(), t.term), termContext), BooleanClause.Occur.SHOULD);
+          final TermStates termStates = new TermStates(searcher.getTopReaderContext());
+          termStates.register(t.state, context.ord, t.docFreq, t.totalTermFreq);
+          bq.add(new TermQuery(new Term( SolrRangeQuery.this.getField(), t.term), termStates), BooleanClause.Occur.SHOULD);
         }
         Query q = new ConstantScoreQuery(bq.build());
         final Weight weight = searcher.rewrite(q).createWeight(searcher, needScores ? ScoreMode.COMPLETE : ScoreMode.COMPLETE_NO_SCORES, score());

@@ -18,12 +18,14 @@ package org.apache.solr.client.solrj.io.stream;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.apache.solr.client.solrj.impl.CloudSolrClient;
@@ -159,8 +161,8 @@ public class FacetStream extends TupleStream implements Expressible  {
     int limitInt = 0;
     try{
       limitInt = Integer.parseInt(limitStr);
-      if(limitInt <= 0){
-        throw new IOException(String.format(Locale.ROOT,"invalid expression %s - limit '%s' must be greater than 0.",expression, limitStr));
+      if(limitInt <= 0 && limitInt != -1){
+        throw new IOException(String.format(Locale.ROOT,"invalid expression %s - limit '%s' must be greater than 0 or -1.",expression, limitStr));
       }
     }
     catch(NumberFormatException e){
@@ -221,6 +223,9 @@ public class FacetStream extends TupleStream implements Expressible  {
     this.buckets = buckets;
     this.metrics = metrics;
     this.bucketSizeLimit   = bucketSizeLimit;
+    if (this.bucketSizeLimit == -1) {
+      this.bucketSizeLimit = Integer.MAX_VALUE;
+    }
     this.collection = collection;
     this.bucketSorts = bucketSorts;
     
@@ -302,9 +307,8 @@ public class FacetStream extends TupleStream implements Expressible  {
     
     child.setImplementingClass("Solr/Lucene");
     child.setExpressionType(ExpressionType.DATASTORE);
-    ModifiableSolrParams tmpParams = new ModifiableSolrParams(SolrParams.toMultiMap(params.toNamedList()));
 
-    child.setExpression(tmpParams.getMap().entrySet().stream().map(e -> String.format(Locale.ROOT, "%s=%s", e.getKey(), e.getValue())).collect(Collectors.joining(",")));
+    child.setExpression(params.stream().map(e -> String.format(Locale.ROOT, "%s=%s", e.getKey(), Arrays.toString(e.getValue()))).collect(Collectors.joining(",")));
     
     explanation.addChild(child);
     
@@ -323,9 +327,9 @@ public class FacetStream extends TupleStream implements Expressible  {
     if(cache != null) {
       cloudSolrClient = cache.getCloudSolrClient(zkHost);
     } else {
-      cloudSolrClient = new Builder()
-          .withZkHost(zkHost)
-          .build();
+      final List<String> hosts = new ArrayList<>();
+      hosts.add(zkHost);
+      cloudSolrClient = new Builder(hosts, Optional.empty()).build();
     }
 
     FieldComparator[] adjustedSorts = adjustSorts(buckets, bucketSorts);
@@ -348,7 +352,9 @@ public class FacetStream extends TupleStream implements Expressible  {
 
   public void close() throws IOException {
     if(cache == null) {
-      cloudSolrClient.close();
+      if (cloudSolrClient != null) {
+        cloudSolrClient.close();
+      }
     }
   }
 

@@ -18,9 +18,11 @@
 package org.apache.solr.cloud.autoscaling;
 
 import java.lang.invoke.MethodHandles;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -29,13 +31,16 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import org.apache.solr.client.solrj.cloud.autoscaling.Policy;
-import org.apache.solr.client.solrj.cloud.autoscaling.SolrCloudManager;
+import org.apache.solr.client.solrj.cloud.SolrCloudManager;
+import org.apache.solr.client.solrj.cloud.autoscaling.Suggester;
 import org.apache.solr.client.solrj.cloud.autoscaling.TriggerEventType;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.cloud.ClusterState;
 import org.apache.solr.common.cloud.DocCollection;
 import org.apache.solr.common.cloud.Slice;
 import org.apache.solr.common.params.AutoScalingParams;
+import org.apache.solr.common.params.CollectionParams;
+import org.apache.solr.common.util.Pair;
 import org.apache.solr.core.SolrResourceLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,24 +53,34 @@ import static org.apache.solr.common.params.AutoScalingParams.PREFERRED_OP;
 public class MetricTrigger extends TriggerBase {
   private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
-  private final String metric;
-  private final Number above, below;
-  private final String collection, shard, node, preferredOp;
+  private String metric;
+  private Number above, below;
+  private String collection, shard, node, preferredOp;
 
   private final Map<String, Long> lastNodeEvent = new ConcurrentHashMap<>();
 
-  public MetricTrigger(String name, Map<String, Object> properties, SolrResourceLoader loader, SolrCloudManager cloudManager) {
-    super(TriggerEventType.METRIC, name, properties, loader, cloudManager);
+  public MetricTrigger(String name) {
+    super(TriggerEventType.METRIC, name);
+    TriggerUtils.requiredProperties(requiredProperties, validProperties, METRIC);
+    TriggerUtils.validProperties(validProperties, ABOVE, BELOW, PREFERRED_OP,
+        AutoScalingParams.COLLECTION,
+        AutoScalingParams.SHARD,
+        AutoScalingParams.NODE);
+  }
+
+  @Override
+  public void configure(SolrResourceLoader loader, SolrCloudManager cloudManager, Map<String, Object> properties) throws TriggerValidationException {
+    super.configure(loader, cloudManager, properties);
     this.metric = (String) properties.get(METRIC);
     this.above = (Number) properties.get(ABOVE);
     this.below = (Number) properties.get(BELOW);
     this.collection = (String) properties.getOrDefault(AutoScalingParams.COLLECTION, Policy.ANY);
     shard = (String) properties.getOrDefault(AutoScalingParams.SHARD, Policy.ANY);
     if (collection.equals(Policy.ANY) && !shard.equals(Policy.ANY)) {
-      throw new IllegalArgumentException("When 'shard' is other than #ANY then collection name must be also other than #ANY");
+      throw new TriggerValidationException("shard", "When 'shard' is other than #ANY then collection name must be also other than #ANY");
     }
     node = (String) properties.getOrDefault(AutoScalingParams.NODE, Policy.ANY);
-    preferredOp = (String) properties.getOrDefault(PREFERRED_OP, null);
+    preferredOp = (String) properties.getOrDefault(PREFERRED_OP, CollectionParams.CollectionAction.MOVEREPLICA.toLower());
   }
 
   @Override
@@ -139,7 +154,7 @@ public class MetricTrigger extends TriggerBase {
       values.forEach((tag, rate) -> rates.computeIfAbsent(node, s -> (Number) rate));
     }
 
-    long now = cloudManager.getTimeSource().getTime();
+    long now = cloudManager.getTimeSource().getTimeNs();
     // check for exceeded rates and filter out those with less than waitFor from previous events
     Map<String, Number> hotNodes = rates.entrySet().stream()
         .filter(entry -> waitForElapsed(entry.getKey(), now, lastNodeEvent))
@@ -182,9 +197,23 @@ public class MetricTrigger extends TriggerBase {
       if (!shard.equals(Policy.ANY))  {
         properties.put(AutoScalingParams.SHARD, shard);
       }
-      if (preferredOp != null)  {
-        properties.put(PREFERRED_OP, preferredOp);
+      properties.put(PREFERRED_OP, preferredOp);
+
+      // specify requested ops
+      List<Op> ops = new ArrayList<>(hotNodes.size());
+      for (String n : hotNodes.keySet()) {
+        Op op = new Op(CollectionParams.CollectionAction.get(preferredOp));
+        op.addHint(Suggester.Hint.SRC_NODE, n);
+        if (!collection.equals(Policy.ANY)) {
+          if (!shard.equals(Policy.ANY)) {
+            op.addHint(Suggester.Hint.COLL_SHARD, new Pair<>(collection, shard));
+          } else {
+            op.addHint(Suggester.Hint.COLL, collection);
+          }
+        }
+        ops.add(op);
       }
+      properties.put(TriggerEvent.REQUESTED_OPS, ops);
     }
   }
 }

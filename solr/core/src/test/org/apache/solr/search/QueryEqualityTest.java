@@ -190,7 +190,8 @@ public class QueryEqualityTest extends SolrTestCaseJ4 {
   public void testSignificantTermsQuery() throws Exception {
     SolrQueryRequest req = req("q", "*:*");
     try {
-      assertQueryEquals("sigificantTerms", req, "{!sigificantTerms}");
+      assertQueryEquals(SignificantTermsQParserPlugin.NAME,
+          req, "{!"+SignificantTermsQParserPlugin.NAME+"}");
     } finally {
       req.close();
     }
@@ -274,7 +275,7 @@ public class QueryEqualityTest extends SolrTestCaseJ4 {
   }
 
   public void testQueryCollapse() throws Exception {
-    SolrQueryRequest req = req("myField","foo_s",
+    SolrQueryRequest req = req("myField","foo_s1",
                                "g_sort","foo_s1 asc, foo_i desc");
 
     try {
@@ -321,6 +322,18 @@ public class QueryEqualityTest extends SolrTestCaseJ4 {
       assertQueryEquals("hash", req,
           "{!hash workers=3 worker=0}");
 
+    } finally {
+      req.close();
+    }
+  }
+
+  public void testMinHash() throws Exception {
+    SolrQueryRequest req = req("q","apache lucene is a search library",
+        "df", "min_hash_analyzed");
+
+    try {
+      assertQueryEquals("min_hash", req,
+          "{!min_hash field=\"min_hash_analysed\"}apache lucene is a search library");
     } finally {
       req.close();
     }
@@ -472,7 +485,62 @@ public class QueryEqualityTest extends SolrTestCaseJ4 {
         "{!parent which=foo_s:parent}dude");
     assertQueryEquals("child", "{!child of=foo_s:parent}dude",
         "{!child of=foo_s:parent}dude");
+    // zero query case 
+    assertQueryEquals(null, "{!parent which=foo_s:parent}",
+        "{!parent which=foo_s:parent}");
+    assertQueryEquals(null, "{!child of=foo_s:parent}",
+        "{!child of=foo_s:parent}");
+    assertQueryEquals(null, "{!parent which='+*:* -foo_s:parent'}",
+        "{!child of=foo_s:parent}");
+    
+    final SolrQueryRequest req = req(
+        "fq","bar_s:baz","fq","{!tag=fqban}bar_s:ban",
+        "ffq","bar_s:baz","ffq","{!tag=ffqban}bar_s:ban");
+    try {
+    assertQueryEquals("filters", req,
+        "{!parent which=foo_s:parent param=$fq}foo_s:bar",
+        "{!parent which=foo_s:parent param=$ffq}foo_s:bar" // differently named params
+        );
+    assertQueryEquals("filters", req,
+        "{!parent which=foo_s:parent param=$fq excludeTags=fqban}foo_s:bar",
+        "{!parent which=foo_s:parent param=$ffq excludeTags=ffqban}foo_s:bar" // differently named params
+        );
+    
+    QueryUtils.checkUnequal(// parent filter is not an equal to child
+        QParser.getParser("{!child of=foo_s:parent}", req).getQuery(),
+        QParser.getParser("{!parent which=foo_s:parent}", req).getQuery());
+    
+    } finally {
+      req.close();
+    }
   }
+
+  public void testFilters() throws Exception {
+    final SolrQueryRequest req = req(
+        "fq","bar_s:baz","fq","{!tag=fqban}bar_s:ban",
+        "ffq","{!tag=ffqbaz}bar_s:baz","ffq","{!tag=ffqban}bar_s:ban");
+    try {
+    assertQueryEquals("filters", req,
+        "{!filters param=$fq}foo_s:bar",
+        "{!filters param=$fq}foo_s:bar",
+        "{!filters param=$ffq}foo_s:bar" // differently named params
+        );
+    assertQueryEquals("filters", req,
+        "{!filters param=$fq excludeTags=fqban}foo_s:bar",
+        "{!filters param=$ffq  excludeTags=ffqban}foo_s:bar" 
+        );
+    assertQueryEquals("filters", req,
+        "{!filters excludeTags=top}{!tag=top v='foo_s:bar'}",
+        "{!filters param=$ffq excludeTags='ffqban,ffqbaz'}" 
+        );
+    QueryUtils.checkUnequal(
+        QParser.getParser("{!filters param=$fq}foo_s:bar", req).getQuery(),
+        QParser.getParser("{!filters param=$fq excludeTags=fqban}foo_s:bar", req).getQuery());    
+    } finally {
+      req.close();
+    }
+  }
+
 
   public void testGraphQuery() throws Exception {
     SolrQueryRequest req = req("from", "node_s",
@@ -960,6 +1028,16 @@ public class QueryEqualityTest extends SolrTestCaseJ4 {
                      "currency(amount,USD)",
                      "currency('amount',USD)");
   }
+  public void testFuncRelatedness() throws Exception {
+    SolrQueryRequest req = req("fore","foo_s:front", "back","foo_s:back");
+    try {
+      assertFuncEquals(req,
+                       "agg_relatedness({!query v='foo_s:front'}, {!query v='foo_s:back'})", 
+                       "agg_relatedness($fore, $back)");
+    } finally {
+      req.close();
+    }
+  }
 
   public void testTestFuncs() throws Exception {
     assertFuncEquals("sleep(1,5)", "sleep(1,5)");
@@ -1107,6 +1185,7 @@ public class QueryEqualityTest extends SolrTestCaseJ4 {
     assertFuncEquals("agg_sum(foo_i)", "agg_sum(foo_i)");
     assertFuncEquals("agg_count()", "agg_count()");
     assertFuncEquals("agg_unique(foo_i)", "agg_unique(foo_i)");
+    assertFuncEquals("agg_uniqueBlock(foo_i)", "agg_uniqueBlock(foo_i)");
     assertFuncEquals("agg_hll(foo_i)", "agg_hll(foo_i)");
     assertFuncEquals("agg_sumsq(foo_i)", "agg_sumsq(foo_i)");
     assertFuncEquals("agg_percentile(foo_i,50)", "agg_percentile(foo_i,50)");

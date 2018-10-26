@@ -34,6 +34,7 @@ import org.apache.lucene.index.CorruptIndexException;
 import org.apache.lucene.index.PostingsEnum;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.FieldInfos;
+import org.apache.lucene.index.ImpactsEnum;
 import org.apache.lucene.index.IndexFileNames;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.SegmentInfo;
@@ -296,6 +297,12 @@ public class FSTTermsReader extends FieldsProducer {
       public PostingsEnum postings(PostingsEnum reuse, int flags) throws IOException {
         decodeMetaData();
         return postingsReader.postings(fieldInfo, state, reuse, flags);
+      }
+
+      @Override
+      public ImpactsEnum impacts(int flags) throws IOException {
+        decodeMetaData();
+        return postingsReader.impacts(fieldInfo, state, flags);
       }
 
       @Override

@@ -20,6 +20,7 @@ package org.apache.lucene.codecs.blocktreeords;
 import java.io.IOException;
 
 import org.apache.lucene.codecs.blocktreeords.FSTOrdsOutputs.Output;
+import org.apache.lucene.index.ImpactsEnum;
 import org.apache.lucene.index.PostingsEnum;
 import org.apache.lucene.index.TermState;
 import org.apache.lucene.index.TermsEnum;
@@ -203,6 +204,12 @@ final class OrdsIntersectTermsEnum extends TermsEnum {
   public PostingsEnum postings(PostingsEnum reuse, int flags) throws IOException {
     currentFrame.decodeMetaData();
     return fr.parent.postingsReader.postings(fr.fieldInfo, currentFrame.termState, reuse, flags);
+  }
+
+  @Override
+  public ImpactsEnum impacts(int flags) throws IOException {
+    currentFrame.decodeMetaData();
+    return fr.parent.postingsReader.impacts(fr.fieldInfo, currentFrame.termState, flags);
   }
 
   private int getState() {

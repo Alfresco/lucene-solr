@@ -34,7 +34,7 @@ import org.apache.lucene.classification.SimpleNaiveBayesClassifier;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexableField;
-import org.apache.lucene.index.MultiFields;
+import org.apache.lucene.index.MultiTerms;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
@@ -71,9 +71,6 @@ public class SimpleNaiveBayesDocumentClassifier extends SimpleNaiveBayesClassifi
     this.field2analyzer = field2analyzer;
   }
 
-  /**
-   * {@inheritDoc}
-   */
   @Override
   public ClassificationResult<BytesRef> assignClass(Document document) throws IOException {
     List<ClassificationResult<BytesRef>> assignedClasses = assignNormClasses(document);
@@ -88,9 +85,6 @@ public class SimpleNaiveBayesDocumentClassifier extends SimpleNaiveBayesClassifi
     return assignedClass;
   }
 
-  /**
-   * {@inheritDoc}
-   */
   @Override
   public List<ClassificationResult<BytesRef>> getClasses(Document document) throws IOException {
     List<ClassificationResult<BytesRef>> assignedClasses = assignNormClasses(document);
@@ -98,9 +92,6 @@ public class SimpleNaiveBayesDocumentClassifier extends SimpleNaiveBayesClassifi
     return assignedClasses;
   }
 
-  /**
-   * {@inheritDoc}
-   */
   @Override
   public List<ClassificationResult<BytesRef>> getClasses(Document document, int max) throws IOException {
     List<ClassificationResult<BytesRef>> assignedClasses = assignNormClasses(document);
@@ -112,7 +103,7 @@ public class SimpleNaiveBayesDocumentClassifier extends SimpleNaiveBayesClassifi
     List<ClassificationResult<BytesRef>> assignedClasses = new ArrayList<>();
     Map<String, List<String[]>> fieldName2tokensArray = new LinkedHashMap<>();
     Map<String, Float> fieldName2boost = new LinkedHashMap<>();
-    Terms classes = MultiFields.getTerms(indexReader, classFieldName);
+    Terms classes = MultiTerms.getTerms(indexReader, classFieldName);
     if (classes != null) {
       TermsEnum classesEnum = classes.iterator();
       BytesRef c;
@@ -227,7 +218,7 @@ public class SimpleNaiveBayesDocumentClassifier extends SimpleNaiveBayesClassifi
    */
   private double getTextTermFreqForClass(Term term, String fieldName) throws IOException {
     double avgNumberOfUniqueTerms;
-    Terms terms = MultiFields.getTerms(indexReader, fieldName);
+    Terms terms = MultiTerms.getTerms(indexReader, fieldName);
     long numPostings = terms.getSumDocFreq(); // number of term/doc pairs
     avgNumberOfUniqueTerms = numPostings / (double) terms.getDocCount(); // avg # of unique terms per doc
     int docsWithC = indexReader.docFreq(term);

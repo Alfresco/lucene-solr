@@ -44,7 +44,7 @@ public abstract class FilterLeafReader extends LeafReader {
    *  an instance of {@link FilterLeafReader}.  */
   public static LeafReader unwrap(LeafReader reader) {
     while (reader instanceof FilterLeafReader) {
-      reader = ((FilterLeafReader) reader).in;
+      reader = ((FilterLeafReader) reader).getDelegate();
     }
     return reader;
   }
@@ -214,6 +214,10 @@ public abstract class FilterLeafReader extends LeafReader {
       return in.postings(reuse, flags);
     }
 
+    @Override
+    public ImpactsEnum impacts(int flags) throws IOException {
+      return in.impacts(flags);
+    }
   }
 
   /** Base class for filtering {@link PostingsEnum} implementations. */
@@ -230,11 +234,6 @@ public abstract class FilterLeafReader extends LeafReader {
         throw new NullPointerException("incoming PostingsEnum must not be null");
       }
       this.in = in;
-    }
-
-    @Override
-    public AttributeSource attributes() {
-      return in.attributes();
     }
 
     @Override

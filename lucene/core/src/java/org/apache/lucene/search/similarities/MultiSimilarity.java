@@ -17,7 +17,6 @@
 package org.apache.lucene.search.similarities;
 
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -53,19 +52,18 @@ public class MultiSimilarity extends Similarity {
     for (int i = 0; i < subScorers.length; i++) {
       subScorers[i] = sims[i].scorer(boost, collectionStats, termStats);
     }
-    return new MultiSimScorer(collectionStats.field(), subScorers);
+    return new MultiSimScorer(subScorers);
   }
   
   static class MultiSimScorer extends SimScorer {
     private final SimScorer subScorers[];
     
-    MultiSimScorer(String field, SimScorer subScorers[]) {
-      super(field);
+    MultiSimScorer(SimScorer subScorers[]) {
       this.subScorers = subScorers;
     }
     
     @Override
-    public float score(float freq, long norm) throws IOException {
+    public float score(float freq, long norm) {
       float sum = 0.0f;
       for (SimScorer subScorer : subScorers) {
         sum += subScorer.score(freq, norm);
@@ -74,16 +72,7 @@ public class MultiSimilarity extends Similarity {
     }
 
     @Override
-    public float maxScore(float freq) {
-      float sumMaxScore = 0;
-      for (SimScorer subScorer : subScorers) {
-        sumMaxScore += subScorer.maxScore(freq);
-      }
-      return sumMaxScore;
-    }
-
-    @Override
-    public Explanation explain(Explanation freq, long norm) throws IOException {
+    public Explanation explain(Explanation freq, long norm) {
       List<Explanation> subs = new ArrayList<>();
       for (SimScorer subScorer : subScorers) {
         subs.add(subScorer.explain(freq, norm));

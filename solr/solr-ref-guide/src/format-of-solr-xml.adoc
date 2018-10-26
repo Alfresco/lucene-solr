@@ -69,6 +69,11 @@ As above, for custom InfoHandler implementations.
 `coreLoadThreads`::
 Specifies the number of threads that will be assigned to load cores in parallel.
 
+`replayUpdatesThreads`::
+Specifies the number of threads that will be assigned to replay updates in parallel.
+This pool is shared for all cores of the node.
+The default value is equal to the number of processors.
+
 `coreRootDirectory`::
 The root of the core discovery tree, defaults to `$SOLR_HOME` (by default, `server/solr`).
 
@@ -155,7 +160,7 @@ Custom shard handlers can be defined in `solr.xml` if you wish to create a custo
 <shardHandlerFactory name="ShardHandlerFactory" class="qualified.class.name">
 ----
 
-Since this is a custom shard handler, sub-elements are specific to the implementation. The default and only shard handler provided by Solr is the HttpShardHandlerFactory in which case, the following sub-elements can be specified:
+Since this is a custom shard handler, sub-elements are specific to the implementation. The default and only shard handler provided by Solr is the `HttpShardHandlerFactory` in which case, the following sub-elements can be specified:
 
 `socketTimeout`::
 The read timeout for intra-cluster query and administrative requests. The default is the same as the `distribUpdateSoTimeout` specified in the `<solrcloud>` section.
@@ -167,10 +172,10 @@ The connection timeout for intra-cluster query and administrative requests. Defa
 The URL scheme to be used in distributed search.
 
 `maxConnectionsPerHost`::
-Maximum connections allowed per host. Defaults to `20`.
+Maximum connections allowed per host. Defaults to `100000`.
 
 `maxConnections`::
-Maximum total connections allowed. Defaults to `10000`.
+Maximum total connections allowed. Defaults to `100000`.
 
 `corePoolSize`::
 The initial core size of the threadpool servicing requests. Default is `0`.

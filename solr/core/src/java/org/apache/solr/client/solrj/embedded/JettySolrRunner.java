@@ -53,11 +53,11 @@ import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.server.SslConnectionFactory;
 import org.eclipse.jetty.server.handler.gzip.GzipHandler;
-import org.eclipse.jetty.server.session.HashSessionIdManager;
-import org.eclipse.jetty.servlet.BaseHolder;
+import org.eclipse.jetty.server.session.DefaultSessionIdManager;
 import org.eclipse.jetty.servlet.FilterHolder;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
+import org.eclipse.jetty.servlet.Source;
 import org.eclipse.jetty.util.component.LifeCycle;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
@@ -72,7 +72,7 @@ import org.slf4j.MDC;
  */
 public class JettySolrRunner {
 
-  private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
+  private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
   private static final int THREAD_POOL_MAX_THREADS = 10000;
   // NOTE: needs to be larger than SolrHttpClient.threadPoolSweeperMaxIdleTime
@@ -84,22 +84,22 @@ public class JettySolrRunner {
   FilterHolder debugFilter;
 
   private boolean waitOnSolr = false;
-  private int lastPort = -1;
+  private int jettyPort = -1;
 
   private final JettyConfig config;
   private final String solrHome;
   private final Properties nodeProperties;
-  
+
   private volatile boolean startedBefore = false;
 
   private LinkedList<FilterHolder> extraFilters;
 
   private static final String excludePatterns = "/css/.+,/js/.+,/img/.+,/tpl/.+";
-  
+
   private int proxyPort = -1;
 
   public static class DebugFilter implements Filter {
-    public final static Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
+    private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
     private AtomicLong nRequests = new AtomicLong();
     
@@ -145,20 +145,20 @@ public class JettySolrRunner {
     private void executeDelay() {
       int delayMs = 0;
       for (Delay delay: delays) {
-        log.info("Delaying "+delay.delayValue+", for reason: "+delay.reason);
+        this.log.info("Delaying "+delay.delayValue+", for reason: "+delay.reason);
         if (delay.counter.decrementAndGet() == 0) {
           delayMs += delay.delayValue;
         }        
       }
 
       if (delayMs > 0) {
-        log.info("Pausing this socket connection for " + delayMs + "ms...");
+        this.log.info("Pausing this socket connection for " + delayMs + "ms...");
         try {
           Thread.sleep(delayMs);
         } catch (InterruptedException e) {
           throw new RuntimeException(e);
         }
-        log.info("Waking up after the delay of " + delayMs + "ms...");
+        this.log.info("Waking up after the delay of " + delayMs + "ms...");
       }
     }
 
@@ -248,7 +248,7 @@ public class JettySolrRunner {
       connector.setIdleTimeout(THREAD_POOL_MAX_IDLE_TIME_MS);
       
       server.setConnectors(new Connector[] {connector});
-      server.setSessionIdManager(new HashSessionIdManager(new Random()));
+      server.setSessionIdManager(new DefaultSessionIdManager(server, new Random()));
     } else {
       ServerConnector connector = new ServerConnector(server, new HttpConnectionFactory());
       connector.setPort(port);
@@ -280,14 +280,16 @@ public class JettySolrRunner {
       @Override
       public void lifeCycleStarted(LifeCycle arg0) {
 
-        lastPort = getFirstConnectorPort();
-        nodeProperties.setProperty("hostPort", Integer.toString(lastPort));
+        jettyPort = getFirstConnectorPort();
+        int port = jettyPort;
+        if (proxyPort != -1) port = proxyPort;
+        nodeProperties.setProperty("hostPort", Integer.toString(port));
         nodeProperties.setProperty("hostContext", config.context);
 
         root.getServletContext().setAttribute(SolrDispatchFilter.PROPERTIES_ATTRIBUTE, nodeProperties);
         root.getServletContext().setAttribute(SolrDispatchFilter.SOLRHOME_ATTRIBUTE, solrHome);
 
-        logger.info("Jetty properties: {}", nodeProperties);
+        log.info("Jetty properties: {}", nodeProperties);
 
         debugFilter = root.addFilter(DebugFilter.class, "*", EnumSet.of(DispatcherType.REQUEST) );
         extraFilters = new LinkedList<>();
@@ -300,7 +302,7 @@ public class JettySolrRunner {
           String pathSpec = config.extraServlets.get(servletHolder);
           root.addServlet(servletHolder, pathSpec);
         }
-        dispatchFilter = root.getServletHandler().newFilterHolder(BaseHolder.Source.EMBEDDED);
+        dispatchFilter = root.getServletHandler().newFilterHolder(Source.EMBEDDED);
         dispatchFilter.setHeldClass(SolrDispatchFilter.class);
         dispatchFilter.setInitParameter("excludePatterns", excludePatterns);
         root.addFilter(dispatchFilter, "*", EnumSet.of(DispatcherType.REQUEST));
@@ -384,7 +386,7 @@ public class JettySolrRunner {
       // if started before, make a new server
       if (startedBefore) {
         waitOnSolr = false;
-        int port = reusePort ? lastPort : this.config.port;
+        int port = reusePort ? jettyPort : this.config.port;
         init(port);
       } else {
         startedBefore = true;
@@ -456,7 +458,7 @@ public class JettySolrRunner {
     if (0 == conns.length) {
       throw new RuntimeException("Jetty Server has no Connectors");
     }
-    return (proxyPort != -1) ? proxyPort : ((ServerConnector) conns[0]).getLocalPort();
+    return ((ServerConnector) conns[0]).getLocalPort();
   }
   
   /**
@@ -465,10 +467,10 @@ public class JettySolrRunner {
    * @exception RuntimeException if there is no Connector
    */
   public int getLocalPort() {
-    if (lastPort == -1) {
+    if (jettyPort == -1) {
       throw new IllegalStateException("You cannot get the port until this instance has started");
     }
-    return (proxyPort != -1) ? proxyPort : lastPort;
+    return (proxyPort != -1) ? proxyPort : jettyPort;
   }
   
   /**

@@ -33,16 +33,14 @@ import org.apache.lucene.queries.function.FunctionValues;
 import org.apache.lucene.queries.function.ValueSource;
 import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.ConstantScoreQuery;
 import org.apache.lucene.search.DocValuesFieldExistsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.SortField;
-import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.common.SolrException;
+import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.response.TextResponseWriter;
-import org.apache.solr.search.Filter;
 import org.apache.solr.search.QParser;
-import org.apache.solr.search.QueryWrapperFilter;
-import org.apache.solr.search.SolrConstantScoreQuery;
 import org.apache.solr.search.function.ValueSourceRangeFilter;
 import org.apache.solr.uninverting.UninvertingReader.Type;
 import org.slf4j.Logger;
@@ -88,6 +86,12 @@ public class CurrencyFieldType extends FieldType implements SchemaAware, Resourc
     }
     return null;
   }
+
+  /** The identifier code for the default currency of this field type */
+  public String getDefaultCurrency() {
+    return defaultCurrency;
+  }
+
 
   @Override
   protected void init(IndexSchema schema, Map<String, String> args) {
@@ -260,10 +264,10 @@ public class CurrencyFieldType extends FieldType implements SchemaAware, Resourc
    * <p>
    * For example: If the default Currency specified for a field is 
    * <code>USD</code>, then the values returned by this value source would 
-   * represent the equivilent number of "cents" (ie: value in dollars * 100) 
+   * represent the equivalent number of "cents" (ie: value in dollars * 100)
    * after converting each document's native currency to USD -- because the 
    * default fractional digits for <code>USD</code> is "<code>2</code>".  
-   * So for a document whose indexed value was currently equivilent to 
+   * So for a document whose indexed value was currently equivalent to
    * "<code>5.43,USD</code>" using the the exchange provider for this field, 
    * this ValueSource would return a value of "<code>543</code>"
    * </p>
@@ -290,9 +294,9 @@ public class CurrencyFieldType extends FieldType implements SchemaAware, Resourc
    * <p>
    * For example: If the <code>targetCurrencyCode</code> param is set to
    * <code>USD</code>, then the values returned by this value source would 
-   * represent the equivilent number of dollars after converting each 
+   * represent the equivalent number of dollars after converting each
    * document's raw value to <code>USD</code>.  So for a document whose 
-   * indexed value was currently equivilent to "<code>5.43,USD</code>" 
+   * indexed value was currently equivalent to "<code>5.43,USD</code>"
    * using the the exchange provider for this field, this ValueSource would 
    * return a value of "<code>5.43</code>"
    * </p>
@@ -331,17 +335,15 @@ public class CurrencyFieldType extends FieldType implements SchemaAware, Resourc
         (p2 != null) ? p2.getCurrencyCode() : defaultCurrency;
 
     // ValueSourceRangeFilter doesn't check exists(), so we have to
-    final Filter docsWithValues = new QueryWrapperFilter(new DocValuesFieldExistsQuery(getAmountField(field).getName()));
-    final Filter vsRangeFilter = new ValueSourceRangeFilter
+    final Query docsWithValues = new DocValuesFieldExistsQuery(getAmountField(field).getName());
+    final Query vsRangeFilter = new ValueSourceRangeFilter
         (new RawCurrencyValueSource(field, currencyCode, parser),
             p1 == null ? null : p1.getAmount() + "",
             p2 == null ? null : p2.getAmount() + "",
             minInclusive, maxInclusive);
-    final BooleanQuery.Builder docsInRange = new BooleanQuery.Builder();
-    docsInRange.add(docsWithValues, Occur.FILTER);
-    docsInRange.add(vsRangeFilter, Occur.FILTER);
-
-    return new SolrConstantScoreQuery(new QueryWrapperFilter(docsInRange.build()));
+    return new ConstantScoreQuery(new BooleanQuery.Builder()
+        .add(docsWithValues, Occur.FILTER)
+        .add(vsRangeFilter, Occur.FILTER).build());
   }
 
   @Override
@@ -666,164 +668,5 @@ public class CurrencyFieldType extends FieldType implements SchemaAware, Resourc
     }
   }
 
-  /**
-   * Represents a Currency field value, which includes a long amount and ISO currency code.
-   */
-  static class CurrencyValue {
-    private long amount;
-    private String currencyCode;
-  
-    /**
-     * Constructs a new currency value.
-     *
-     * @param amount       The amount.
-     * @param currencyCode The currency code.
-     */
-    public CurrencyValue(long amount, String currencyCode) {
-      this.amount = amount;
-      this.currencyCode = currencyCode;
-    }
-  
-    /**
-     * Constructs a new currency value by parsing the specific input.
-     * <p/>
-     * Currency values are expected to be in the format &lt;amount&gt;,&lt;currency code&gt;,
-     * for example, "500,USD" would represent 5 U.S. Dollars.
-     * <p/>
-     * If no currency code is specified, the default is assumed.
-     *
-     * @param externalVal The value to parse.
-     * @param defaultCurrency The default currency.
-     * @return The parsed CurrencyValue.
-     */
-    public static CurrencyValue parse(String externalVal, String defaultCurrency) {
-      if (externalVal == null) {
-        return null;
-      }
-      String amount = externalVal;
-      String code = defaultCurrency;
-  
-      if (externalVal.contains(",")) {
-        String[] amountAndCode = externalVal.split(",");
-        amount = amountAndCode[0];
-        code = amountAndCode[1];
-      }
-  
-      if (amount.equals("*")) {
-        return null;
-      }
-      
-      Currency currency = getCurrency(code);
-  
-      if (currency == null) {
-        throw new SolrException(ErrorCode.BAD_REQUEST, "Currency code not supported by this JVM: " + code);
-      }
-  
-      try {
-        double value = Double.parseDouble(amount);
-        long currencyValue = Math.round(value * Math.pow(10.0, currency.getDefaultFractionDigits()));
-  
-        return new CurrencyValue(currencyValue, code);
-      } catch (NumberFormatException e) {
-        throw new SolrException(ErrorCode.BAD_REQUEST, e);
-      }
-    }
-  
-    /**
-     * The amount of the CurrencyValue.
-     *
-     * @return The amount.
-     */
-    public long getAmount() {
-      return amount;
-    }
-  
-    /**
-     * The ISO currency code of the CurrencyValue.
-     *
-     * @return The currency code.
-     */
-    public String getCurrencyCode() {
-      return currencyCode;
-    }
-  
-    /**
-     * Performs a currency conversion & unit conversion.
-     *
-     * @param exchangeRates      Exchange rates to apply.
-     * @param sourceCurrencyCode The source currency code.
-     * @param sourceAmount       The source amount.
-     * @param targetCurrencyCode The target currency code.
-     * @return The converted indexable units after the exchange rate and currency fraction digits are applied.
-     */
-    public static long convertAmount(ExchangeRateProvider exchangeRates, String sourceCurrencyCode, long sourceAmount, String targetCurrencyCode) {
-      double exchangeRate = exchangeRates.getExchangeRate(sourceCurrencyCode, targetCurrencyCode);
-      return convertAmount(exchangeRate, sourceCurrencyCode, sourceAmount, targetCurrencyCode);
-    }
-  
-    /**
-     * Performs a currency conversion & unit conversion.
-     *
-     * @param exchangeRate         Exchange rate to apply.
-     * @param sourceFractionDigits The fraction digits of the source.
-     * @param sourceAmount         The source amount.
-     * @param targetFractionDigits The fraction digits of the target.
-     * @return The converted indexable units after the exchange rate and currency fraction digits are applied.
-     */
-    public static long convertAmount(final double exchangeRate, final int sourceFractionDigits, final long sourceAmount, final int targetFractionDigits) {
-      int digitDelta = targetFractionDigits - sourceFractionDigits;
-      double value = ((double) sourceAmount * exchangeRate);
-  
-      if (digitDelta != 0) {
-        if (digitDelta < 0) {
-          for (int i = 0; i < -digitDelta; i++) {
-            value *= 0.1;
-          }
-        } else {
-          for (int i = 0; i < digitDelta; i++) {
-            value *= 10.0;
-          }
-        }
-      }
-  
-      return (long) value;
-    }
-  
-    /**
-     * Performs a currency conversion & unit conversion.
-     *
-     * @param exchangeRate       Exchange rate to apply.
-     * @param sourceCurrencyCode The source currency code.
-     * @param sourceAmount       The source amount.
-     * @param targetCurrencyCode The target currency code.
-     * @return The converted indexable units after the exchange rate and currency fraction digits are applied.
-     */
-    public static long convertAmount(double exchangeRate, String sourceCurrencyCode, long sourceAmount, String targetCurrencyCode) {
-      if (targetCurrencyCode.equals(sourceCurrencyCode)) {
-        return sourceAmount;
-      }
-  
-      int sourceFractionDigits = Currency.getInstance(sourceCurrencyCode).getDefaultFractionDigits();
-      Currency targetCurrency = Currency.getInstance(targetCurrencyCode);
-      int targetFractionDigits = targetCurrency.getDefaultFractionDigits();
-      return convertAmount(exchangeRate, sourceFractionDigits, sourceAmount, targetFractionDigits);
-    }
-  
-    /**
-     * Returns a new CurrencyValue that is the conversion of this CurrencyValue to the specified currency.
-     *
-     * @param exchangeRates      The exchange rate provider.
-     * @param targetCurrencyCode The target currency code to convert this CurrencyValue to.
-     * @return The converted CurrencyValue.
-     */
-    public CurrencyValue convertTo(ExchangeRateProvider exchangeRates, String targetCurrencyCode) {
-      return new CurrencyValue(convertAmount(exchangeRates, this.getCurrencyCode(), this.getAmount(), targetCurrencyCode), targetCurrencyCode);
-    }
-  
-    @Override
-    public String toString() {
-      return String.valueOf(amount) + "," + currencyCode;
-    }
-  }
 }
 

@@ -22,6 +22,7 @@ import org.apache.solr.SolrTestCaseJ4;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.metrics.MetricsMap;
+import org.apache.solr.metrics.SolrMetricManager;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -382,7 +383,7 @@ public class TestReRankQParserPlugin extends SolrTestCaseJ4 {
         "//result/doc[5]/str[@name='id'][.='2']"
     );
 
-    MetricsMap metrics = (MetricsMap)h.getCore().getCoreMetricManager().getRegistry().getMetrics().get("CACHE.searcher.queryResultCache");
+    MetricsMap metrics = (MetricsMap)((SolrMetricManager.GaugeWrapper)h.getCore().getCoreMetricManager().getRegistry().getMetrics().get("CACHE.searcher.queryResultCache")).getGauge();
     Map<String,Object> stats = metrics.getValue();
 
     long inserts = (Long) stats.get("inserts");
@@ -602,6 +603,47 @@ public class TestReRankQParserPlugin extends SolrTestCaseJ4 {
       fail("A syntax error should be thrown when "+ReRankQParserPlugin.RERANK_QUERY+" parameter is not specified");
     } catch (SolrException e) {
       assertTrue(e.code() == SolrException.ErrorCode.BAD_REQUEST.code);
+    }
+  }
+
+  @Test
+  public void testReRankQueriesWithDefType() throws Exception {
+
+    assertU(delQ("*:*"));
+    assertU(commit());
+
+    final String[] doc1 = {"id","1"};
+    assertU(adoc(doc1));
+    assertU(commit());
+    final String[] doc2 = {"id","2"};
+    assertU(adoc(doc2));
+    assertU(commit());
+
+    final String preferredDocId;
+    final String lessPreferrredDocId;
+    if (random().nextBoolean()) {
+      preferredDocId = "1";
+      lessPreferrredDocId = "2";
+    } else {
+      preferredDocId = "2";
+      lessPreferrredDocId = "1";
+    }
+
+    for (final String defType : new String[] {
+        null,
+        LuceneQParserPlugin.NAME,
+        ExtendedDismaxQParserPlugin.NAME
+    }) {
+      final ModifiableSolrParams params = new ModifiableSolrParams();
+      params.add("rq", "{!"+ReRankQParserPlugin.NAME+" "+ReRankQParserPlugin.RERANK_QUERY+"=id:"+preferredDocId+"}");
+      params.add("q", "*:*");
+      if (defType != null) {
+        params.add(QueryParsing.DEFTYPE, defType);
+      }
+      assertQ(req(params), "*[count(//doc)=2]",
+          "//result/doc[1]/str[@name='id'][.='"+preferredDocId+"']",
+          "//result/doc[2]/str[@name='id'][.='"+lessPreferrredDocId+"']"
+      );
     }
   }
 

@@ -20,7 +20,9 @@ import java.io.IOException;
 import java.io.PrintStream;
 
 import org.apache.lucene.codecs.BlockTermState;
+import org.apache.lucene.index.ImpactsEnum;
 import org.apache.lucene.index.PostingsEnum;
+import org.apache.lucene.index.SlowImpactsEnum;
 import org.apache.lucene.index.TermState;
 import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.store.ByteArrayDataInput;
@@ -1003,6 +1005,13 @@ public final class IDVersionSegmentTermsEnum extends TermsEnum {
     //System.out.println("  state=" + currentFrame.state);
     //}
     return fr.parent.postingsReader.postings(fr.fieldInfo, currentFrame.state, reuse, flags);
+  }
+
+  @Override
+  public ImpactsEnum impacts(int flags) throws IOException {
+    // Only one posting, the slow impl is fine
+    // We could make this throw UOE but then CheckIndex is angry
+    return new SlowImpactsEnum(postings(null, flags));
   }
 
   @Override

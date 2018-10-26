@@ -17,8 +17,6 @@
 package org.apache.lucene.search;
 
 
-import java.io.IOException;
-
 import org.apache.lucene.analysis.MockAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
@@ -84,9 +82,9 @@ public class TestSimilarityProvider extends LuceneTestCase {
 
     // sanity check of searching
     TopDocs foodocs = searcher.search(new TermQuery(new Term("foo", "brown")), 10);
-    assertTrue(foodocs.totalHits > 0);
+    assertTrue(foodocs.totalHits.value > 0);
     TopDocs bardocs = searcher.search(new TermQuery(new Term("bar", "brown")), 10);
-    assertTrue(bardocs.totalHits > 0);
+    assertTrue(bardocs.totalHits.value > 0);
     assertTrue(foodocs.scoreDocs[0].score < bardocs.scoreDocs[0].score);
   }
 
@@ -113,15 +111,10 @@ public class TestSimilarityProvider extends LuceneTestCase {
 
     @Override
     public SimScorer scorer(float boost, CollectionStatistics collectionStats, TermStatistics... termStats) {
-      return new SimScorer(collectionStats.field()) {
+      return new SimScorer() {
 
         @Override
-        public float score(float freq, long norm) throws IOException {
-          return 1;
-        }
-
-        @Override
-        public float maxScore(float maxFreq) {
+        public float score(float freq, long norm) {
           return 1;
         }
       };
@@ -138,15 +131,9 @@ public class TestSimilarityProvider extends LuceneTestCase {
 
     @Override
     public SimScorer scorer(float boost, CollectionStatistics collectionStats, TermStatistics... termStats) {
-      return new SimScorer(collectionStats.field()) {
-
+      return new SimScorer() {
         @Override
-        public float score(float freq, long norm) throws IOException {
-          return 10;
-        }
-
-        @Override
-        public float maxScore(float maxFreq) {
+        public float score(float freq, long norm) {
           return 10;
         }
       };

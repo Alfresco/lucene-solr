@@ -308,19 +308,20 @@ public final class DefaultSolrCoreState extends SolrCoreState implements Recover
           // after the current one, and if there is, bail
           boolean locked = recoveryLock.tryLock();
           try {
-            if (!locked) {
-              if (recoveryWaiting.get() > 0) {
-                return;
-              }
-              recoveryWaiting.incrementAndGet();
-            } else {
-              recoveryWaiting.incrementAndGet();
-              cancelRecovery();
+            if (!locked && recoveryWaiting.get() > 0) {
+              return;
             }
+
+            recoveryWaiting.incrementAndGet();
+            cancelRecovery();
             
             recoveryLock.lock();
             try {
-              recoveryWaiting.decrementAndGet();
+              // don't use recoveryLock.getQueueLength() for this
+              if (recoveryWaiting.decrementAndGet() > 0) {
+                // another recovery waiting behind us, let it run now instead of after we finish
+                return;
+              }
               
               // to be air tight we must also check after lock
               if (cc.isShutDown()) {
@@ -359,11 +360,8 @@ public final class DefaultSolrCoreState extends SolrCoreState implements Recover
       // have to 'wait in line' a bit or bail if a recovery is 
       // already queued up - the recovery execution itself is run
       // in another thread on another 'recovery' executor.
-      // The update executor is interrupted on shutdown and should 
-      // not do disk IO.
-      // The recovery executor is not interrupted on shutdown.
       //
-      // avoid deadlock: we can't use the recovery executor here
+      // avoid deadlock: we can't use the recovery executor here!
       cc.getUpdateShardHandler().getUpdateExecutor().submit(recoveryTask);
     } catch (RejectedExecutionException e) {
       // fine, we are shutting down

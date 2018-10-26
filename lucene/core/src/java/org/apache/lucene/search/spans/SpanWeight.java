@@ -19,19 +19,26 @@ package org.apache.lucene.search.spans;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Map;
 
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.PostingsEnum;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.index.TermContext;
+import org.apache.lucene.index.TermStates;
 import org.apache.lucene.search.CollectionStatistics;
 import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.LeafSimScorer;
+import org.apache.lucene.search.Matches;
+import org.apache.lucene.search.MatchesIterator;
+import org.apache.lucene.search.MatchesUtils;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TermStatistics;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.search.similarities.Similarity;
+import org.apache.lucene.util.ArrayUtil;
 
 /**
  * Expert-only.  Public for use by other weight implementations
@@ -79,41 +86,41 @@ public abstract class SpanWeight extends Weight {
    * Create a new SpanWeight
    * @param query the parent query
    * @param searcher the IndexSearcher to query against
-   * @param termContexts a map of terms to termcontexts for use in building the similarity.  May
+   * @param termStates a map of terms to {@link TermStates} for use in building the similarity.  May
    *                     be null if scores are not required
    * @throws IOException on error
    */
-  public SpanWeight(SpanQuery query, IndexSearcher searcher, Map<Term, TermContext> termContexts, float boost) throws IOException {
+  public SpanWeight(SpanQuery query, IndexSearcher searcher, Map<Term, TermStates> termStates, float boost) throws IOException {
     super(query);
     this.field = query.getField();
     this.similarity = searcher.getSimilarity();
-    this.simScorer = buildSimWeight(query, searcher, termContexts, boost);
+    this.simScorer = buildSimWeight(query, searcher, termStates, boost);
   }
 
-  private Similarity.SimScorer buildSimWeight(SpanQuery query, IndexSearcher searcher, Map<Term, TermContext> termContexts, float boost) throws IOException {
-    if (termContexts == null || termContexts.size() == 0 || query.getField() == null)
+  private Similarity.SimScorer buildSimWeight(SpanQuery query, IndexSearcher searcher, Map<Term, TermStates> termStates, float boost) throws IOException {
+    if (termStates == null || termStates.size() == 0 || query.getField() == null)
       return null;
-    TermStatistics[] termStats = new TermStatistics[termContexts.size()];
+    TermStatistics[] termStats = new TermStatistics[termStates.size()];
     int termUpTo = 0;
-    for (Term term : termContexts.keySet()) {
-      TermStatistics termStatistics = searcher.termStatistics(term, termContexts.get(term));
+    for (Term term : termStates.keySet()) {
+      TermStatistics termStatistics = searcher.termStatistics(term, termStates.get(term));
       if (termStatistics != null) {
         termStats[termUpTo++] = termStatistics;
       }
     }
     CollectionStatistics collectionStats = searcher.collectionStatistics(query.getField());
     if (termUpTo > 0) {
-      return similarity.scorer(boost, collectionStats, Arrays.copyOf(termStats, termUpTo));
+      return similarity.scorer(boost, collectionStats, ArrayUtil.copyOfSubArray(termStats, 0, termUpTo));
     } else {
       return null; // no terms at all exist, we won't use similarity
     }
   }
 
   /**
-   * Collect all TermContexts used by this Weight
-   * @param contexts a map to add the TermContexts to
+   * Collect all TermStates used by this Weight
+   * @param contexts a map to add the TermStates to
    */
-  public abstract void extractTermContexts(Map<Term, TermContext> contexts);
+  public abstract void extractTermStates(Map<Term, TermStates> contexts);
 
   /**
    * Expert: Return a Spans object iterating over matches from this Weight
@@ -140,7 +147,7 @@ public abstract class SpanWeight extends Weight {
    * @throws IOException on error
    */
   public LeafSimScorer getSimScorer(LeafReaderContext context) throws IOException {
-    return simScorer == null ? null : new LeafSimScorer(simScorer, context.reader(), true, Float.POSITIVE_INFINITY);
+    return simScorer == null ? null : new LeafSimScorer(simScorer, context.reader(), field, true);
   }
 
   @Override
@@ -150,7 +157,7 @@ public abstract class SpanWeight extends Weight {
       int newDoc = scorer.iterator().advance(doc);
       if (newDoc == doc) {
         float freq = scorer.sloppyFreq();
-        LeafSimScorer docScorer = new LeafSimScorer(simScorer, context.reader(), true, Float.POSITIVE_INFINITY);
+        LeafSimScorer docScorer = new LeafSimScorer(simScorer, context.reader(), field, true);
         Explanation freqExplanation = Explanation.match(freq, "phraseFreq=" + freq);
         Explanation scoreExplanation = docScorer.explain(doc, freqExplanation);
         return Explanation.match(scoreExplanation.getValue(),
@@ -160,5 +167,139 @@ public abstract class SpanWeight extends Weight {
     }
 
     return Explanation.noMatch("no matching term");
+  }
+
+  private static class TermMatch {
+    Term term;
+    int position;
+    int startOffset;
+    int endOffset;
+  }
+
+  @Override
+  public Matches matches(LeafReaderContext context, int doc) throws IOException {
+    return MatchesUtils.forField(field, () -> {
+      Spans spans = getSpans(context, Postings.OFFSETS);
+      if (spans == null || spans.advance(doc) != doc) {
+        return null;
+      }
+      return new MatchesIterator() {
+
+        int innerTermCount = 0;
+        TermMatch[] innerTerms = new TermMatch[0];
+
+        SpanCollector termCollector = new SpanCollector() {
+          @Override
+          public void collectLeaf(PostingsEnum postings, int position, Term term) throws IOException {
+            innerTermCount++;
+            if (innerTermCount > innerTerms.length) {
+              TermMatch[] temp = new TermMatch[innerTermCount];
+              System.arraycopy(innerTerms, 0, temp, 0, innerTermCount - 1);
+              innerTerms = temp;
+              innerTerms[innerTermCount - 1] = new TermMatch();
+            }
+            innerTerms[innerTermCount - 1].term = term;
+            innerTerms[innerTermCount - 1].position = position;
+            innerTerms[innerTermCount - 1].startOffset = postings.startOffset();
+            innerTerms[innerTermCount - 1].endOffset = postings.endOffset();
+          }
+
+          @Override
+          public void reset() {
+            innerTermCount = 0;
+          }
+        };
+
+        @Override
+        public boolean next() throws IOException {
+          innerTermCount = 0;
+          return spans.nextStartPosition() != Spans.NO_MORE_POSITIONS;
+        }
+
+        @Override
+        public int startPosition() {
+          return spans.startPosition();
+        }
+
+        @Override
+        public int endPosition() {
+          return spans.endPosition() - 1;
+        }
+
+        @Override
+        public int startOffset() throws IOException {
+          if (innerTermCount == 0) {
+            collectInnerTerms();
+          }
+          return innerTerms[0].startOffset;
+        }
+
+        @Override
+        public int endOffset() throws IOException {
+          if (innerTermCount == 0) {
+            collectInnerTerms();
+          }
+          return innerTerms[innerTermCount - 1].endOffset;
+        }
+
+        @Override
+        public MatchesIterator getSubMatches() throws IOException {
+          if (innerTermCount == 0) {
+            collectInnerTerms();
+          }
+          return new MatchesIterator() {
+
+            int upto = -1;
+
+            @Override
+            public boolean next() throws IOException {
+              upto++;
+              return upto < innerTermCount;
+            }
+
+            @Override
+            public int startPosition() {
+              return innerTerms[upto].position;
+            }
+
+            @Override
+            public int endPosition() {
+              return innerTerms[upto].position;
+            }
+
+            @Override
+            public int startOffset() throws IOException {
+              return innerTerms[upto].startOffset;
+            }
+
+            @Override
+            public int endOffset() throws IOException {
+              return innerTerms[upto].endOffset;
+            }
+
+            @Override
+            public MatchesIterator getSubMatches() throws IOException {
+              return null;
+            }
+
+            @Override
+            public Query getQuery() {
+              return new TermQuery(innerTerms[upto].term);
+            }
+          };
+        }
+
+        @Override
+        public Query getQuery() {
+          return SpanWeight.this.getQuery();
+        }
+
+        void collectInnerTerms() throws IOException {
+          termCollector.reset();
+          spans.collect(termCollector);
+          Arrays.sort(innerTerms, 0, innerTermCount, Comparator.comparing(a -> a.position));
+        }
+      };
+    });
   }
 }
