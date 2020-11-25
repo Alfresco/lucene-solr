@@ -652,7 +652,6 @@ public class SolrDocumentFetcher {
       return dvFields;
     }
 
-    //who uses all of these?
     private ReturnFields getReturnFields() {
       return solrReturnFields;
     }
@@ -674,7 +673,7 @@ public class SolrDocumentFetcher {
           SchemaField schemaField = searcher.getSchema().getFieldOrNull(name);
           if (schemaField == null) return false; // Get it from the stored fields if, for some reasonm, we can't get the schema.
           if (schemaField.stored() && schemaField.multiValued()) return false; // must return multivalued fields from stored data if possible.
-          if (schemaField.stored() == false) return true; // if it's not stored, no choice but to return from DV.
+          if (!schemaField.stored()) return true; // if it's not stored, no choice but to return from DV.
           return false;
         });
       }
@@ -718,7 +717,7 @@ public class SolrDocumentFetcher {
 
     private SolrDocument getSolrDoc(int luceneDocId) {
 
-      SolrDocument sdoc = null;
+      SolrDocument sdoc;
       try {
         if (returnStoredFields()) {
           Document doc = doc(luceneDocId, getStoredFields());
@@ -734,7 +733,7 @@ public class SolrDocumentFetcher {
 
         // decorate the document with non-stored docValues fields
         if (returnDVFields()) {
-//          decorateDocValueFields(sdoc, luceneDocId, getDvFields());
+          decorateDocValueFields(sdoc, luceneDocId, getDvFields());
         }
       } catch (IOException e) {
         throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, "Error reading document with docId " + luceneDocId, e);
