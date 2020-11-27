@@ -67,7 +67,6 @@ public class DocsStreamer implements Iterator<SolrDocument> {
   private final DocIterator docIterator;
 
   private final Set<String> fnames; // returnFields.getLuceneFieldNames(). Maybe null. Not empty.
-//  private final boolean onlyPseudoFields;
   private final SolrReturnFields solrReturnFields;
 
   private int idx = -1;
@@ -78,9 +77,6 @@ public class DocsStreamer implements Iterator<SolrDocument> {
     transformer = rctx.getReturnFields().getTransformer();
     docIterator = this.docs.iterator();
     fnames = rctx.getReturnFields().getLuceneFieldNames();
-    //TODO move onlyPseudoFields calc to ReturnFields
-//    onlyPseudoFields = (fnames == null && !rctx.getReturnFields().wantsAllFields() && !rctx.getReturnFields().hasPatternMatching())
-//        || (fnames != null && fnames.size() == 1 && SolrReturnFields.SCORE.equals(fnames.iterator().next()));
 
     // add non-stored DV fields that may have been requested
     docFetcher = rctx.getSearcher().getDocFetcher();
