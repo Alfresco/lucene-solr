@@ -33,6 +33,8 @@ import org.apache.solr.response.transform.RenameFieldTransformer;
 import org.apache.solr.response.transform.ScoreAugmenter;
 import org.apache.solr.response.transform.TransformerFactory;
 import org.apache.solr.response.transform.ValueSourceAugmenter;
+import org.apache.solr.search.SolrDocumentFetcher.RetrieveFieldsOptimizer;
+
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -41,6 +43,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * The default implementation of return fields parsing for Solr.
@@ -68,9 +71,20 @@ public class SolrReturnFields extends ReturnFields {
   protected boolean _wantsAllFields = false;
   protected Map<String,String> renameFields = Collections.emptyMap();
 
+  private RetrieveFieldsOptimizer fetchOptimizer = null;
+
+
   public SolrReturnFields() {
     _wantsAllFields = true;
   }
+
+  public RetrieveFieldsOptimizer getFetchOptimizer(Supplier<RetrieveFieldsOptimizer> supplier) {
+    if (fetchOptimizer == null) {
+      fetchOptimizer = supplier.get();
+    }
+    return fetchOptimizer;
+  }
+
 
   public SolrReturnFields(SolrQueryRequest req) {
     this( req.getParams().getParams(CommonParams.FL), req );

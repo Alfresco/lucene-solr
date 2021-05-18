@@ -67,8 +67,7 @@ public class DocsStreamer implements Iterator<SolrDocument> {
   private final DocIterator docIterator;
 
   private final Set<String> fnames; // returnFields.getLuceneFieldNames(). Maybe null. Not empty.
-  private final boolean onlyPseudoFields;
-  private final Set<String> dvFieldsToReturn; // maybe null. Not empty.
+  private final SolrReturnFields solrReturnFields;
 
   private int idx = -1;
 
@@ -78,13 +77,10 @@ public class DocsStreamer implements Iterator<SolrDocument> {
     transformer = rctx.getReturnFields().getTransformer();
     docIterator = this.docs.iterator();
     fnames = rctx.getReturnFields().getLuceneFieldNames();
-    //TODO move onlyPseudoFields calc to ReturnFields
-    onlyPseudoFields = (fnames == null && !rctx.getReturnFields().wantsAllFields() && !rctx.getReturnFields().hasPatternMatching())
-        || (fnames != null && fnames.size() == 1 && SolrReturnFields.SCORE.equals(fnames.iterator().next()));
 
     // add non-stored DV fields that may have been requested
     docFetcher = rctx.getSearcher().getDocFetcher();
-    dvFieldsToReturn = calcDocValueFieldsForReturn(docFetcher, rctx.getReturnFields());
+    solrReturnFields = (SolrReturnFields) rctx.getReturnFields();
 
     if (transformer != null) transformer.setContext(rctx);
   }
@@ -145,24 +141,7 @@ public class DocsStreamer implements Iterator<SolrDocument> {
   public SolrDocument next() {
     int id = docIterator.nextDoc();
     idx++;
-    SolrDocument sdoc = null;
-
-    if (onlyPseudoFields) {
-      // no need to get stored fields of the document, see SOLR-5968
-      sdoc = new SolrDocument();
-    } else {
-      try {
-        Document doc = docFetcher.doc(id, fnames);
-        sdoc = convertLuceneDocToSolrDoc(doc, rctx.getSearcher().getSchema()); // make sure to use the schema from the searcher and not the request (cross-core)
-
-        // decorate the document with non-stored docValues fields
-        if (dvFieldsToReturn != null) {
-          docFetcher.decorateDocValueFields(sdoc, id, dvFieldsToReturn);
-        }
-      } catch (IOException e) {
-        throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, "Error reading document with docId " + id, e);
-      }
-    }
+    SolrDocument sdoc = docFetcher.solrDoc(id, solrReturnFields);
 
     if (transformer != null) {
       boolean doScore = rctx.wantsScores();
@@ -172,27 +151,37 @@ public class DocsStreamer implements Iterator<SolrDocument> {
         throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, "Error applying transformer", e);
       }
     }
-    return sdoc;
 
+    return sdoc;
   }
 
-  // TODO move to SolrDocumentFetcher ?  Refactor to also call docFetcher.decorateDocValueFields(...) ?
-  public static SolrDocument convertLuceneDocToSolrDoc(Document doc, final IndexSchema schema) {
+  public static SolrDocument convertLuceneDocToSolrDoc(Document doc,
+                                                       final IndexSchema schema) {
+    return convertLuceneDocToSolrDoc(doc, schema, null);
+  }
+
+  public static SolrDocument convertLuceneDocToSolrDoc(Document doc,
+                                                       final IndexSchema schema,
+                                                       final ReturnFields fields) {
     SolrDocument out = new SolrDocument();
+    final Set<String> fieldNamesNeeded = fields != null? fields.getLuceneFieldNames() : null;
     for (IndexableField f : doc.getFields()) {
-      // Make sure multivalued fields are represented as lists
-      Object existing = out.get(f.name());
-      if (existing == null) {
-        SchemaField sf = schema.getFieldOrNull(f.name());
-        if (sf != null && sf.multiValued()) {
-          List<Object> vals = new ArrayList<>();
-          vals.add(f);
-          out.setField(f.name(), vals);
+      final String fname = f.name();
+      if (null == fieldNamesNeeded || fieldNamesNeeded.contains(fname) ) {
+        // Make sure multivalued fields are represented as lists
+        Object existing = out.get(f.name());
+        if (existing == null) {
+          SchemaField sf = schema.getFieldOrNull(f.name());
+          if (sf != null && sf.multiValued()) {
+            List<Object> vals = new ArrayList<>();
+            vals.add(f);
+            out.setField(f.name(), vals);
+          } else {
+            out.setField(f.name(), f);
+          }
         } else {
-          out.setField(f.name(), f);
+          out.addField(f.name(), f);
         }
-      } else {
-        out.addField(f.name(), f);
       }
     }
     return out;
