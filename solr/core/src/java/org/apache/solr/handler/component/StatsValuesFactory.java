@@ -17,6 +17,7 @@
 package org.apache.solr.handler.component;
 
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.util.*;
 import java.nio.ByteBuffer;
 import org.apache.lucene.index.LeafReaderContext;
@@ -829,7 +830,7 @@ class StringStatsValues extends AbstractStatsValues<String> {
 
   @Override
   public long hash(String v) {
-    return hasher.hashString(v).asLong();
+    return hasher.hashString(v, Charset.defaultCharset()).asLong();
   }
   
   @Override
