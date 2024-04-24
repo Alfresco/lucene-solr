@@ -16,9 +16,8 @@
  */
 package org.apache.solr.core;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.StringReader;
+import java.io.*;
+import java.nio.ByteBuffer;
 import java.lang.invoke.MethodHandles;
 import java.util.Arrays;
 import java.util.Collections;
@@ -66,7 +65,24 @@ public class TestSolrConfigHandler extends RestTestBase {
 
   private static final String collection = "collection1";
   private static final String confDir = collection + "/conf";
+  public static ByteBuffer getFileContent(String f) throws IOException {
+      return getFileContent(f, true);
+    }
 
+  /**
+     * @param loadFromClassPath if true, it will look in the classpath to find the file,
+     *        otherwise load from absolute filesystem path.
+     */
+    public static ByteBuffer getFileContent(String f, boolean loadFromClassPath) throws IOException {
+      ByteBuffer jar;
+      File file = loadFromClassPath ? getFile(f): new File(f);
+      try (FileInputStream fis = new FileInputStream(file)) {
+        byte[] buf = new byte[fis.available()];
+        fis.read(buf);
+        jar = ByteBuffer.wrap(buf);
+      }
+      return jar;
+    }
 
   @Before
   public void before() throws Exception {
