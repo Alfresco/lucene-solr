@@ -171,18 +171,12 @@ public class ConfigSetsHandler extends RequestHandlerBase implements PermissionN
     InputStream inputStream = contentStreamsIterator.next().getStream();
 
     // Create a node for the configuration in zookeeper
-    Set<String> filesToDelete = Collections.emptySet();
     createBaseZnode(zkClient, overwritesExisting, isTrusted(req, coreContainer.getAuthenticationPlugin()), false, configPathInZk);
 
     ZipInputStream zis = new ZipInputStream(inputStream, StandardCharsets.UTF_8);
     ZipEntry zipEntry = null;
     while ((zipEntry = zis.getNextEntry()) != null) {
       String filePathInZk = configPathInZk + "/" + zipEntry.getName();
-      if (filePathInZk.endsWith("/")) {
-        filesToDelete.remove(filePathInZk.substring(0, filePathInZk.length() -1));
-      } else {
-        filesToDelete.remove(filePathInZk);
-      }
       if (zipEntry.isDirectory()) {
         zkClient.makePath(filePathInZk, false, true);
       } else {
@@ -191,7 +185,6 @@ public class ConfigSetsHandler extends RequestHandlerBase implements PermissionN
       }
     }
     zis.close();
-    deleteUnusedFiles(zkClient, filesToDelete);
   }
 
   private void createBaseZnode(SolrZkClient zkClient, boolean overwritesExisting, boolean requestIsTrusted, boolean cleanup, String configPathInZk) throws KeeperException, InterruptedException {
@@ -205,23 +198,6 @@ public class ConfigSetsHandler extends RequestHandlerBase implements PermissionN
       }
     } else {
       zkClient.makePath(configPathInZk, baseZnodeData, true);
-    }
-  }
-
-  private void deleteUnusedFiles(SolrZkClient zkClient, Set<String> filesToDelete) throws InterruptedException, KeeperException {
-    if (!filesToDelete.isEmpty()) {
-      if (log.isInfoEnabled()) {
-        log.info("Cleaning up {} unused files", filesToDelete.size());
-      }
-      if (log.isDebugEnabled()) {
-        log.debug("Cleaning up unused files: {}", filesToDelete);
-      }
-      for (String f:filesToDelete) {
-        try {
-          zkClient.delete(f, -1, true);
-        } catch (KeeperException.NoNodeException nne) {
-        }
-      }
     }
   }
 
