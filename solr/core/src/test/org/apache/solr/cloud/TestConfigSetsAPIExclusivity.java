@@ -17,11 +17,14 @@
 package org.apache.solr.cloud;
 
 import java.lang.invoke.MethodHandles;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 
 import org.apache.solr.SolrTestCaseJ4;
+import org.apache.solr.common.cloud.SolrZkClient;
+import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.request.ConfigSetAdminRequest;
 import org.apache.solr.client.solrj.request.ConfigSetAdminRequest.Create;
@@ -56,13 +59,19 @@ public class TestConfigSetsAPIExclusivity extends SolrTestCaseJ4 {
   @Override
   @After
   public void tearDown() throws Exception {
-    solrCluster.shutdown();
+    if (null != solrCluster) {
+      solrCluster.shutdown();
+      solrCluster = null;
+    }
     super.tearDown();
   }
 
   @Test
   public void testAPIExclusivity() throws Exception {
     int trials = 20;
+    ZkStateReader reader = solrCluster.getSolrClient().getZkStateReader();
+    if (reader == null)
+      solrCluster.getSolrClient().connect();
     setupBaseConfigSet(GRANDBASE_CONFIGSET_NAME);
     CreateThread createBaseThread =
         new CreateThread(solrCluster, BASE_CONFIGSET_NAME, GRANDBASE_CONFIGSET_NAME, trials);
@@ -89,6 +98,8 @@ public class TestConfigSetsAPIExclusivity extends SolrTestCaseJ4 {
 
   private void setupBaseConfigSet(String baseConfigSetName) throws Exception {
     solrCluster.uploadConfigSet(configset("configset-2"), baseConfigSetName);
+    //Make configset untrusted
+    solrCluster.getZkClient().setData("/configs/" + baseConfigSetName, "{\"trusted\": false}".getBytes(StandardCharsets.UTF_8), true);
   }
 
   private Exception getFirstExceptionOrNull(List<Exception> list) {
