@@ -19,7 +19,6 @@ package org.apache.solr.handler.component;
 import java.lang.invoke.MethodHandles;
 import java.net.ConnectException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -43,7 +42,6 @@ import org.apache.solr.client.solrj.util.ClientUtils;
 import org.apache.solr.cloud.CloudDescriptor;
 import org.apache.solr.cloud.ZkController;
 import org.apache.solr.common.SolrException;
-import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.common.cloud.ClusterState;
 import org.apache.solr.common.cloud.DocCollection;
 import org.apache.solr.common.cloud.Replica;
@@ -81,6 +79,7 @@ public class HttpShardHandler extends ShardHandler {
     // This is primarily to keep track of what order we should use to query the replicas of a shard
     // so that we use the same replica for all phases of a distributed request.
     shardToURLs = new HashMap<>();
+
   }
 
 
@@ -341,13 +340,6 @@ public class HttpShardHandler extends ShardHandler {
       rb.shards = new String[rb.slices.length];
     }
 
-    HttpShardHandlerFactory.WhitelistHostChecker hostChecker = httpShardHandlerFactory.getWhitelistHostChecker();
-    if (shards != null && zkController == null && hostChecker.isWhitelistHostCheckingEnabled() && !hostChecker.hasExplicitWhitelist()) {
-      throw new SolrException(ErrorCode.FORBIDDEN, "HttpShardHandlerFactory "+HttpShardHandlerFactory.INIT_SHARDS_WHITELIST
-          +" not configured but required (in lieu of ZkController and ClusterState) when using the '"+ShardParams.SHARDS+"' parameter."
-          +HttpShardHandlerFactory.SET_SOLR_DISABLE_SHARDS_WHITELIST_CLUE);
-    }
-
     //
     // Map slices to shards
     //
@@ -368,20 +360,9 @@ public class HttpShardHandler extends ShardHandler {
         if (shortCircuit) {
           rb.isDistrib = false;
           rb.shortCircuitedURL = ZkCoreNodeProps.getCoreUrl(zkController.getBaseUrl(), coreDescriptor.getName());
-          if (hostChecker.isWhitelistHostCheckingEnabled() && hostChecker.hasExplicitWhitelist()) {
-            /*
-             * We only need to check the host whitelist if there is an explicit whitelist (other than all the live nodes)
-             * when the "shards" indicate cluster state elements only
-             */
-            hostChecker.checkWhitelist(clusterState, shards, Arrays.asList(rb.shortCircuitedURL));
-          }
           return;
         }
         // We shouldn't need to do anything to handle "shard.rows" since it was previously meant to be an optimization?
-      }
-      
-      if (clusterState == null && zkController != null) {
-        clusterState =  zkController.getClusterState();
       }
 
 
@@ -390,9 +371,9 @@ public class HttpShardHandler extends ShardHandler {
         if (rb.shards[i] != null) {
           shardUrls = StrUtils.splitSmart(rb.shards[i], "|", true);
           replicaListTransformer.transform(shardUrls);
-          hostChecker.checkWhitelist(clusterState, shards, shardUrls);
         } else {
-          if (slices == null) {
+          if (clusterState == null) {
+            clusterState =  zkController.getClusterState();
             slices = clusterState.getSlicesMap(cloudDescriptor.getCollectionName());
           }
           String sliceName = rb.slices[i];
@@ -425,14 +406,6 @@ public class HttpShardHandler extends ShardHandler {
             shardUrls.add(url);
           }
 
-          if (hostChecker.isWhitelistHostCheckingEnabled() && hostChecker.hasExplicitWhitelist()) {
-            /*
-             * We only need to check the host whitelist if there is an explicit whitelist (other than all the live nodes)
-             * when the "shards" indicate cluster state elements only
-             */
-            hostChecker.checkWhitelist(clusterState, shards, shardUrls);
-          }
-
           if (shardUrls.isEmpty()) {
             boolean tolerant = rb.req.getParams().getBool(ShardParams.SHARDS_TOLERANT, false);
             if (!tolerant) {
@@ -454,11 +427,6 @@ public class HttpShardHandler extends ShardHandler {
           sliceShardsStr.append(shardUrl);
         }
         rb.shards[i] = sliceShardsStr.toString();
-      }
-    } else {
-      if (shards != null) {
-        // No cloud, verbatim check of shards
-        hostChecker.checkWhitelist(shards, new ArrayList<>(Arrays.asList(shards.split("[,|]"))));
       }
     }
     String shards_rows = params.get(ShardParams.SHARDS_ROWS);

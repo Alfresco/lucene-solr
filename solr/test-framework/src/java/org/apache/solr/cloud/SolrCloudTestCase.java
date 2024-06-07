@@ -85,7 +85,7 @@ public class SolrCloudTestCase extends SolrTestCaseJ4 {
   /**
    * Builder class for a MiniSolrCloudCluster
    */
-  public static class Builder {
+  protected static class Builder {
 
     private final int nodeCount;
     private final Path baseDir;
@@ -202,7 +202,7 @@ public class SolrCloudTestCase extends SolrTestCaseJ4 {
   }
 
   /** The cluster */
-  public static MiniSolrCloudCluster cluster;
+  protected static MiniSolrCloudCluster cluster;
 
   protected static SolrZkClient zkClient() {
     ZkStateReader reader = cluster.getSolrClient().getZkStateReader();

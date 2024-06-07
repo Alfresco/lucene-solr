@@ -63,7 +63,6 @@ public class DistributedDebugComponentTest extends SolrJettyTestBase {
   
   @BeforeClass
   public static void createThings() throws Exception {
-    systemSetPropertySolrDisableShardsWhitelist("true");
     solrHome = createSolrHome();
     createJetty(solrHome.getAbsolutePath());
     String url = jetty.getBaseUrl().toString();
@@ -106,7 +105,6 @@ public class DistributedDebugComponentTest extends SolrJettyTestBase {
     jetty.stop();
     jetty=null;
     resetExceptionIgnores();
-    systemClearPropertySolrDisableShardsWhitelist();
   }
   
   @Test

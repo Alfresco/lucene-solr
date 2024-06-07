@@ -31,7 +31,6 @@ public class TestJsonRequest extends SolrTestCaseHS {
 
   @BeforeClass
   public static void beforeTests() throws Exception {
-    systemSetPropertySolrDisableShardsWhitelist("true");
     JSONTestUtil.failRepeatedKeys = true;
     initCore("solrconfig-tlog.xml","schema_latest.xml");
   }
@@ -49,7 +48,6 @@ public class TestJsonRequest extends SolrTestCaseHS {
       servers.stop();
       servers = null;
     }
-    systemClearPropertySolrDisableShardsWhitelist();
   }
 
   @Test
