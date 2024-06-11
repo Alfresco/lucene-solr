@@ -152,6 +152,8 @@ public class HttpShardHandlerFactory extends ShardHandlerFactory implements org.
 
   static final String MAX_CONNECTION_IDLE_TIME = "maxConnectionIdleTime";
 
+  public static final String INIT_SHARDS_WHITELIST_PROPERTY = "solr.shardsWhitelist";
+
   public static final String INIT_SHARDS_WHITELIST = "shardsWhitelist";
 
   static final String INIT_SOLR_DISABLE_SHARDS_WHITELIST = "solr.disable." + INIT_SHARDS_WHITELIST;
@@ -186,6 +188,18 @@ public class HttpShardHandlerFactory extends ShardHandlerFactory implements org.
     return getDisableShardsWhitelist();
   }
 
+  /**
+   * ACS-7921: Custom method simplifying provision of shards whitelist.
+   * Tries to retrieve the whitelist from bean property, but if it is unavailable, then we reach for the system property.
+   * Implemented this way since manual declaration of this value in ShardHandlerFactory bean declaration can get difficult in more complicated configs.
+   * @param args
+   * @return
+   */
+  private static String getShardsWhitelist(NamedList args) {
+    String shardsWhitelistSetInConfig = (String) args.get(INIT_SHARDS_WHITELIST);
+
+    return shardsWhitelistSetInConfig == null? System.getProperty(INIT_SHARDS_WHITELIST_PROPERTY) : shardsWhitelistSetInConfig;
+  }
 
   private static boolean getDisableShardsWhitelist() {
     return Boolean.getBoolean(INIT_SOLR_DISABLE_SHARDS_WHITELIST);
