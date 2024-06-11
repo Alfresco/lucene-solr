@@ -41,6 +41,9 @@ Bug Fixes
  * SOLR-12450: Don't allow referal to external resources in various config files.
   (Yuyang Xiao, Uwe Schindler)
 
+  * SOLR-12514: Rule-base Authorization plugin skips authorization if querying node does not have collection
+    replica (noble)
+
 ==================  6.6.4 ==================
 
 Consult the LUCENE_CHANGES.txt file for additional, low level, changes in this release.
