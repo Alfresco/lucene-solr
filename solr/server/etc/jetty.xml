@@ -42,7 +42,7 @@
   <Get name="ThreadPool">
     <Set name="minThreads" type="int"><Property name="solr.jetty.threads.min" default="10"/></Set>
     <Set name="maxThreads" type="int"><Property name="solr.jetty.threads.max" default="10000"/></Set>
-    <Set name="idleTimeout" type="int"><Property name="solr.jetty.threads.idle.timeout" default="5000"/></Set>
+    <Set name="idleTimeout" type="int"><Property name="solr.jetty.threads.idle.timeout" default="120000"/></Set>
     <Set name="stopTimeout" type="int"><Property name="solr.jetty.threads.stop.timeout" default="60000"/></Set>
     <Set name="detailedDump">false</Set>
   </Get>
@@ -82,18 +82,19 @@
   </New>
 
     <!-- =========================================================== -->
-    <!-- RewriteHandle to redirect root to Solr                      -->
+    <!-- RewriteHandle to set headers, redirect root to Solr         -->
     <!-- =========================================================== -->
      <New id="RewriteHandler" class="org.eclipse.jetty.rewrite.handler.RewriteHandler">
       <Set name="rewriteRequestURI">true</Set>
       <Set name="rewritePathInfo">false</Set>
       <Set name="originalPathAttribute">requestedPath</Set>
 
+      <!-- redirect root to solr -->
       <Call name="addRule">
         <Arg>
           <New class="org.eclipse.jetty.rewrite.handler.RedirectRegexRule">
             <Set name="regex">^/$</Set>
-            <Set name="replacement">/solr/</Set>
+            <Set name="location">/solr/</Set>
           </New>
         </Arg>
       </Call>
@@ -105,12 +106,38 @@
            </New>
          </Arg>
        </Call>
+       <Call name="addRule">
+         <Arg>
+           <New class="org.eclipse.jetty.rewrite.handler.RewritePatternRule">
+             <Set name="pattern">/api/*</Set>
+             <Set name="replacement">/solr/____v2</Set>
+           </New>
+         </Arg>
+       </Call>
        <Set name="handler">
          <New id="Handlers" class="org.eclipse.jetty.server.handler.HandlerCollection">
            <Set name="handlers">
              <Array type="org.eclipse.jetty.server.Handler">
                <Item>
-                 <New id="Contexts" class="org.eclipse.jetty.server.handler.ContextHandlerCollection"/>
+                 <New class="org.eclipse.jetty.server.handler.InetAccessHandler">
+                   <Call name="include">
+                     <Arg>
+                       <Call class="org.eclipse.jetty.util.StringUtil" name="csvSplit">
+                         <Arg><Property name="solr.jetty.inetaccess.includes" default=""/></Arg>
+                       </Call>
+                     </Arg>
+                   </Call>
+                   <Call name="exclude">
+                     <Arg>
+                       <Call class="org.eclipse.jetty.util.StringUtil" name="csvSplit">
+                         <Arg><Property name="solr.jetty.inetaccess.excludes" default=""/></Arg>
+                       </Call>
+                     </Arg>
+                   </Call>
+                   <Set name="handler">
+                     <New id="Contexts" class="org.eclipse.jetty.server.handler.ContextHandlerCollection"/>
+                   </Set>
+                 </New>
                </Item>
                <Item>
                  <New id="InstrumentedHandler" class="com.codahale.metrics.jetty9.InstrumentedHandler">
@@ -119,9 +146,6 @@
                      <New id="DefaultHandler" class="org.eclipse.jetty.server.handler.DefaultHandler"/>
                    </Set>
                  </New>
-               </Item>
-               <Item>
-                 <New id="RequestLog" class="org.eclipse.jetty.server.handler.RequestLogHandler"/>
                </Item>
              </Array>
            </Set>
@@ -133,35 +157,8 @@
     <!-- Set handler Collection Structure                            -->
     <!-- =========================================================== -->
     <Set name="handler">
-      <Ref id="RewriteHandler"/>
+      <Ref refid="RewriteHandler"/>
     </Set>
-    
-    <!-- =========================================================== -->
-    <!-- Configure Request Log                                       -->
-    <!-- =========================================================== -->
-    <!--
-    <Ref id="Handlers">
-      <Call name="addHandler">
-        <Arg>
-          <New id="RequestLog" class="org.eclipse.jetty.server.handler.RequestLogHandler">
-            <Set name="requestLog">
-              <New id="RequestLogImpl" class="org.eclipse.jetty.server.NCSARequestLog">
-                <Set name="filename">
-                   logs/request.yyyy_mm_dd.log
-                </Set>
-                <Set name="filenameDateFormat">yyyy_MM_dd</Set>
-                <Set name="retainDays">90</Set>
-                <Set name="append">true</Set>
-                <Set name="extended">false</Set>
-                <Set name="logCookies">false</Set>
-                <Set name="LogTimeZone">UTC</Set>
-              </New>
-            </Set>
-          </New>
-        </Arg>
-      </Call>
-    </Ref>
-    -->
 
     <!-- =========================================================== -->
     <!-- extra options                                               -->
