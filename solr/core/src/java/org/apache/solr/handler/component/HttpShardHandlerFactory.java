@@ -196,9 +196,11 @@ public class HttpShardHandlerFactory extends ShardHandlerFactory implements org.
    * @return
    */
   private static String getShardsWhitelist(NamedList args) {
-    String shardsWhitelistSetInConfig = (String) args.get(INIT_SHARDS_WHITELIST);
-
-    return shardsWhitelistSetInConfig == null? System.getProperty(INIT_SHARDS_WHITELIST_PROPERTY) : shardsWhitelistSetInConfig;
+    if (args != null && args.get(INIT_SHARDS_WHITELIST) != null) {
+      return (String) args.get(INIT_SHARDS_WHITELIST);
+    } else {
+      return System.getProperty(INIT_SHARDS_WHITELIST_PROPERTY);
+    }
   }
 
   private static boolean getDisableShardsWhitelist() {
@@ -234,7 +236,7 @@ public class HttpShardHandlerFactory extends ShardHandlerFactory implements org.
     this.connectionsEvictorSleepDelay = getParameter(args, CONNECTIONS_EVICTOR_SLEEP_DELAY, connectionsEvictorSleepDelay, sb);
     this.maxConnectionIdleTime = getParameter(args, MAX_CONNECTION_IDLE_TIME, maxConnectionIdleTime, sb);
 
-    this.whitelistHostChecker = new WhitelistHostChecker(args == null? null: (String) args.get(INIT_SHARDS_WHITELIST), !getDisableShardsWhitelist());
+    this.whitelistHostChecker = new WhitelistHostChecker(getShardsWhitelist(args), !getDisableShardsWhitelist());
     log.info("Host whitelist initialized: {}", this.whitelistHostChecker);
     
     log.debug("created with {}",sb);
