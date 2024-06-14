@@ -29,19 +29,8 @@
           <Array type="org.eclipse.jetty.server.ConnectionFactory">
             <Item>
               <New class="org.eclipse.jetty.server.SslConnectionFactory">
-                <Arg name="next">alpn</Arg>
+                <Arg name="next">http/1.1</Arg>
                 <Arg name="sslContextFactory"><Ref refid="sslContextFactory"/></Arg>
-              </New>
-            </Item>
-            <Item>
-              <New id="alpn" class="org.eclipse.jetty.alpn.server.ALPNServerConnectionFactory">
-                <Arg name="protocols">
-                  <Array type="java.lang.String">
-                    <Item>h2</Item>
-                    <Item>http/1.1</Item>
-                  </Array>
-                </Arg>
-                <Set name="defaultProtocol">http/1.1</Set>
               </New>
             </Item>
             <Item>
