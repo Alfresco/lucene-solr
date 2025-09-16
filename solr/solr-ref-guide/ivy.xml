@@ -29,6 +29,6 @@
     <dependency org="org.slf4j" name="jcl-over-slf4j" rev="${/org.slf4j/jcl-over-slf4j}" conf="compile"/>
     <dependency org="org.slf4j" name="slf4j-api" rev="${/org.slf4j/slf4j-api}" conf="compile"/>
     <dependency org="org.slf4j" name="slf4j-simple" rev="${/org.slf4j/slf4j-simple}" conf="compile"/>
-    <dependency org="log4j" name="log4j" rev="${/log4j/log4j}" conf="compile"/>
+    <dependency org="ch.qos.reload4j" name="reload4j" rev="${/ch.qos.reload4j/reload4j}" conf="compile"/>
   </dependencies>
 </ivy-module>

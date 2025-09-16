@@ -35,6 +35,7 @@
     <ibiblio name="sonatype-releases" root="https://oss.sonatype.org/content/repositories/releases" m2compatible="true" />
     <ibiblio name="maven.restlet.org" root="http://maven.restlet.org" m2compatible="true" />
     <ibiblio name="releases.cloudera.com" root="http://repository.cloudera.com/content/repositories/releases" m2compatible="true" />
+    <ibiblio name="atlassian" root="https://packages.atlassian.com/mvn/maven-atlassian-external/" m2compatible="true" />
 
     <!-- you might need to tweak this from china so it works -->
     <ibiblio name="working-chinese-mirror" root="http://uk.maven.org/maven2" m2compatible="true" />
@@ -54,6 +55,7 @@
       <resolver ref="sonatype-releases" />
       <resolver ref="releases.cloudera.com"/>
       <resolver ref="working-chinese-mirror" />
+      <resolver ref="atlassian"/>
     </chain>
   </resolvers>
 
