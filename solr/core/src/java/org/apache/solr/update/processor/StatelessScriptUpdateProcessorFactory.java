@@ -27,7 +27,7 @@ import org.apache.solr.request.LocalSolrQueryRequest;
 import org.apache.solr.response.SolrQueryResponse;
 import org.apache.solr.update.*;
 import org.apache.solr.util.plugin.SolrCoreAware;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.FilenameUtils;
 

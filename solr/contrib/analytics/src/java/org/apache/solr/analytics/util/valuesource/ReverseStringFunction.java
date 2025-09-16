@@ -16,7 +16,7 @@
  */
 package org.apache.solr.analytics.util.valuesource;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.lucene.queries.function.FunctionValues;
 import org.apache.lucene.queries.function.ValueSource;
 import org.apache.solr.analytics.util.AnalyticsParams;

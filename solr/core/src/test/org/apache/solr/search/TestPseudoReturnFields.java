@@ -28,7 +28,7 @@ import org.apache.solr.schema.SchemaField;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import org.junit.Before;
 import org.junit.BeforeClass;
