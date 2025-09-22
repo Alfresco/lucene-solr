@@ -255,7 +255,7 @@ public class TestLevenshteinAutomata extends LuceneTestCase {
   }
   
   //*****************************
-  // Compute Levenshtein distance: see org.apache.commons.lang.StringUtils#getLevenshteinDistance(String, String)
+  // Compute Levenshtein distance: see org.apache.commons.lang3.StringUtils#getLevenshteinDistance(String, String)
   //*****************************
   private int getDistance (String target, String other) {
     char[] sa;
