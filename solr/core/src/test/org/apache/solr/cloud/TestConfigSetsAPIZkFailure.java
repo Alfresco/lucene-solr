@@ -91,8 +91,14 @@ public class TestConfigSetsAPIZkFailure extends SolrTestCaseJ4 {
   @Override
   @After
   public void tearDown() throws Exception {
-    solrCluster.shutdown();
-    zkTestServer.shutdown();
+    if (null != solrCluster) {
+      solrCluster.shutdown();
+      solrCluster = null;
+    }
+    if (null != zkTestServer) {
+      zkTestServer.shutdown();
+      zkTestServer = null;
+    }
     super.tearDown();
   }
 
@@ -102,10 +108,10 @@ public class TestConfigSetsAPIZkFailure extends SolrTestCaseJ4 {
     final SolrClient solrClient = getHttpSolrClient(baseUrl);
 
     final Map<String, String> oldProps = ImmutableMap.of("immutable", "true");
-    setupBaseConfigSet(BASE_CONFIGSET_NAME, oldProps);
 
     SolrZkClient zkClient = new SolrZkClient(solrCluster.getZkServer().getZkAddress(),
         AbstractZkTestCase.TIMEOUT, AbstractZkTestCase.TIMEOUT, null);
+    setupBaseConfigSet(BASE_CONFIGSET_NAME, oldProps, zkClient);
     try {
       ZkConfigManager configManager = new ZkConfigManager(zkClient);
       assertFalse(configManager.configExists(CONFIGSET_NAME));
@@ -127,7 +133,7 @@ public class TestConfigSetsAPIZkFailure extends SolrTestCaseJ4 {
     solrClient.close();
   }
 
-  private void setupBaseConfigSet(String baseConfigSetName, Map<String, String> oldProps) throws Exception {
+  private void setupBaseConfigSet(String baseConfigSetName, Map<String, String> oldProps, SolrZkClient zkClient) throws Exception {
     final File configDir = getFile("solr").toPath().resolve("configsets/configset-2/conf").toFile();
     final File tmpConfigDir = createTempDir().toFile();
     tmpConfigDir.deleteOnExit();
@@ -137,6 +143,7 @@ public class TestConfigSetsAPIZkFailure extends SolrTestCaseJ4 {
           getConfigSetProps(oldProps), StandardCharsets.UTF_8);
     }
     solrCluster.uploadConfigSet(tmpConfigDir.toPath(), baseConfigSetName);
+    zkClient.setData("/configs/" + baseConfigSetName, "{\"trusted\": false}".getBytes(StandardCharsets.UTF_8), true);
   }
 
   private StringBuilder getConfigSetProps(Map<String, String> map) {

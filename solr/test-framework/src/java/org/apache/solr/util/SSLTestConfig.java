@@ -17,6 +17,7 @@
 package org.apache.solr.util;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.Random;
 import java.security.KeyManagementException;
 import java.security.KeyStore;
@@ -27,7 +28,6 @@ import java.security.SecureRandomSpi;
 import java.security.UnrecoverableKeyException;
 
 import javax.net.ssl.SSLContext;
-import java.net.MalformedURLException;
 
 import org.apache.http.conn.scheme.Scheme;
 import org.apache.http.conn.scheme.SchemeRegistry;
@@ -110,7 +110,7 @@ public class SSLTestConfig extends SSLConfig {
     Resource result;
     try {
       result = Resource.newResource(userInput);
-    } catch (MalformedURLException e) {
+    } catch (IOException e) {
       throw new IllegalArgumentException("Can't build " + type + " Resource: " + e.getMessage(), e);
     }
     if (! result.exists()) {

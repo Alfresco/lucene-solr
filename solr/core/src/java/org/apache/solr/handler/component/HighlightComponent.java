@@ -47,6 +47,7 @@ import org.apache.solr.util.SolrPluginUtils;
 import org.apache.solr.util.plugin.PluginInfoInitialized;
 import org.apache.solr.util.plugin.SolrCoreAware;
 
+import static java.util.Optional.ofNullable;
 import static java.util.stream.Collectors.toMap;
 
 /**
@@ -115,8 +116,9 @@ public class HighlightComponent extends SearchComponent implements PluginInfoIni
     if(rb.doHighlights){
       rb.setNeedDocList(true);
       String hlq = params.get(HighlightParams.Q);
-      String hlparser = Objects.firstNonNull(params.get(HighlightParams.QPARSER),
-                                              params.get(QueryParsing.DEFTYPE, QParserPlugin.DEFAULT_QTYPE));
+      String hlparser =
+              ofNullable(params.get(HighlightParams.QPARSER))
+                      .orElseGet( () -> params.get(QueryParsing.DEFTYPE, QParserPlugin.DEFAULT_QTYPE));
       if(hlq != null){
         try {
           QParser parser = QParser.getParser(hlq, hlparser, rb.req);
